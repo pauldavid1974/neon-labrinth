@@ -528,8 +528,7 @@ export class Game implements GameCtx {
     this.stats.kills++;
     this.stats.score += Math.round(ENEMY_SCORE[kind] * (1 + 0.25 * (this.floor - 1)));
     const tint = ENEMY_TINT[kind];
-    this.fx.burst(p.x + 0.5, p.y + 0.5, tint, 26, 5, 0.55, 0.16);
-    this.fx.burst(p.x + 0.5, p.y + 0.5, 0xffffff, 10, 3.4, 0.3, 0.1);
+    this.fx.burst(p.x + 0.5, p.y + 0.5, tint, 30, 5, 0.55, 0.16);
     this.fx.shards(p.x + 0.5, p.y + 0.5, tint, 14, 4);
     this.fx.ring(p.x, p.y, tint, 1.7);
     this.sfx.play("kill");

@@ -403,7 +403,9 @@ function tryShoot(ctx: GameCtx): boolean {
     }
   }
 
-  const endT = s.pierce ? wallDist : bestT;
+  // stop the beam at the target's rim (not its center) so it reads as an
+  // impact, never a line through the body
+  const endT = s.pierce ? wallDist : Math.max(0.45, bestT - 0.32);
   const ex = ox + dx * endT;
   const ey = oy + dy * endT;
   ctx.fx.beam(ox - 0.5, oy - 0.5, ex - 0.5, ey - 0.5, s.weapon.color, 2.1);

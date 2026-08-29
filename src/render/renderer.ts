@@ -610,13 +610,14 @@ export class Renderer implements IFx {
       const dx = x1 - x0;
       const dy = y1 - y0;
       const len = Math.sqrt(dx * dx + dy * dy) * TILE;
+      // pure neon beam — no white core; glow → mid → solid color
       const g = b.g;
       g.clear()
-        .rect(0, -width * 2.4, len, width * 4.8)
-        .fill({ color, alpha: 0.22 })
-        .rect(0, -width, len, width * 2)
-        .fill({ color: 0xffffff, alpha: 0.85 })
-        .rect(0, -width * 0.5, len, width)
+        .rect(0, -width * 2.6, len, width * 5.2)
+        .fill({ color, alpha: 0.16 })
+        .rect(0, -width * 1.2, len, width * 2.4)
+        .fill({ color, alpha: 0.5 })
+        .rect(0, -width * 0.55, len, width * 1.1)
         .fill({ color, alpha: 1 });
       g.x = (x0 + 0.5) * TILE;
       g.y = (y0 + 0.5) * TILE;
@@ -758,8 +759,11 @@ export class Renderer implements IFx {
       const punch = a ? a.punch : 0;
       v.body.scale.set(1 + punch * 0.35);
       if (tag === "loot") v.body.scale.set((1 + punch * 0.35) * lootPulse);
+      // hit feedback brightens toward a lit-up version of the entity's own
+      // color — never a full white-out
       v.flash = Math.max(0, v.flash - dtSim * 5);
-      (v.body as Graphics).tint = mixColor(v.tint, 0xffffff, v.flash);
+      const lit = mixColor(v.tint, 0xffffff, 0.45);
+      (v.body as Graphics).tint = mixColor(v.tint, lit, v.flash);
       if (v.ring) v.ring.rotation += dtSim * 2.6;
       if (tag === "enemy") {
         const hp = hpS.m.get(e);
