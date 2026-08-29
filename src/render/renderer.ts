@@ -112,8 +112,8 @@ export class Renderer implements IFx {
   private time = 0;
   private mmTimer = 0;
 
-  private mouseSx = 0;
-  private mouseSy = 0;
+  private mouseSx = typeof window !== "undefined" ? window.innerWidth / 2 : 0;
+  private mouseSy = typeof window !== "undefined" ? window.innerHeight / 2 : 0;
   private mouseLmb = false;
   private listeners: { el: EventTarget; type: string; fn: EventListener }[] = [];
 
@@ -181,6 +181,7 @@ export class Renderer implements IFx {
     // effect pools (preallocated)
     for (let i = 0; i < 20; i++) {
       const gfx = new Graphics();
+      gfx.scale.set(TILE);
       const glow = new Sprite(this.tex.soft);
       glow.anchor.set(0.5);
       glow.blendMode = "add";
@@ -220,22 +221,31 @@ export class Renderer implements IFx {
       this.texts.push({ t, life: 0, maxLife: 1 });
     }
 
+    this.mouseSx = window.innerWidth / 2;
+    this.mouseSy = window.innerHeight / 2;
+
     const onMove = (e: Event): void => {
-      const me = e as MouseEvent;
+      const me = e as MouseEvent | PointerEvent;
       this.mouseSx = me.clientX;
       this.mouseSy = me.clientY;
     };
     const onDown = (e: Event): void => {
-      if ((e as MouseEvent).button === 0) this.mouseLmb = true;
+      const me = e as MouseEvent | PointerEvent;
+      if (me.button === 0 || me.button === undefined) {
+        this.mouseSx = me.clientX;
+        this.mouseSy = me.clientY;
+        this.mouseLmb = true;
+      }
     };
     const onUp = (): void => {
       this.mouseLmb = false;
     };
     const onCtx = (e: Event): void => e.preventDefault();
     const onResize = (): void => this.resize();
-    this.listen(window, "mousemove", onMove);
-    this.listen(window, "mousedown", onDown);
-    this.listen(window, "mouseup", onUp);
+    this.listen(window, "pointermove", onMove);
+    this.listen(window, "pointerdown", onDown);
+    this.listen(window, "pointerup", onUp);
+    this.listen(window, "pointercancel", onUp);
     this.listen(app.canvas, "contextmenu", onCtx);
     this.listen(window, "resize", onResize);
     this.resize();
@@ -397,8 +407,8 @@ export class Renderer implements IFx {
         g.rect(px, py, TILE, TILE).fill(this.tileBaseColor(x, y, map.floorSeed));
         g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x171126);
         g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0xffb347, width: 1.5, alpha: 0.7 });
-        g.moveTo(px + 6, py + 6).lineTo(px + TILE - 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
-        g.moveTo(px + TILE - 6, py + 6).lineTo(px + 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
+        g.beginPath().moveTo(px + 6, py + 6).lineTo(px + TILE - 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
+        g.beginPath().moveTo(px + TILE - 6, py + 6).lineTo(px + 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
       }
     }
   }
@@ -465,7 +475,7 @@ export class Renderer implements IFx {
     let glowAlpha = 0.4;
 
     const body = new Graphics();
-    let ring: Graphics | null = null;
+    let ring: Container | null = null;
     let bobAmp = 2.2;
 
     if (tag === "player") {
@@ -478,12 +488,13 @@ export class Renderer implements IFx {
         .stroke({ color: C_CYAN, width: 2, alpha: 1 })
         .poly([0, -5, 4.6, 3.4, -4.6, 3.4])
         .fill({ color: C_CYAN, alpha: 0.9 });
-      ring = new Graphics();
-      ring
-        .arc(0, 0, 15.5, 0, 1.9)
-        .stroke({ color: C_CYAN, width: 2, alpha: 0.8 })
-        .arc(0, 0, 15.5, 2.6, 4.0)
-        .stroke({ color: C_MAGENTA, width: 2, alpha: 0.55 });
+      ring = new Container();
+      const ringCyan = new Graphics();
+      ringCyan.arc(0, 0, 15.5, 0, 1.9).stroke({ color: C_CYAN, width: 2, alpha: 0.8 });
+      const ringMagenta = new Graphics();
+      ringMagenta.arc(0, 0, 15.5, 2.6, 4.0).stroke({ color: C_MAGENTA, width: 2, alpha: 0.55 });
+      ring.addChild(ringCyan);
+      ring.addChild(ringMagenta);
       bobAmp = 1.4;
     } else if (tag === "enemy") {
       body
@@ -824,8 +835,11 @@ export class Renderer implements IFx {
     if (playing && pp) {
       const ax = ctx.input.aimX;
       const ay = ctx.input.aimY;
-      const px = pp.x + 0.5;
-      const py = pp.y + 0.5;
+      const pa = animS.get(ctx.player);
+      const prx = pa ? pa.rx : pp.x;
+      const pry = pa ? pa.ry : pp.y;
+      const px = prx + 0.5;
+      const py = pry + 0.5;
       const d = rayToWall(map, px, py, ax, ay, 13);
       let dx = ax - px;
       let dy = ay - py;
@@ -843,8 +857,11 @@ export class Renderer implements IFx {
         if (!m || m.tag !== "enemy") continue;
         const ep = posS.m.get(e);
         if (!ep || map.visible[map.idx(ep.x, ep.y)] !== 1) continue;
-        const rx = ep.x + 0.5 - px;
-        const ry = ep.y + 0.5 - py;
+        const ea = animS.m.get(e);
+        const erx = ea ? ea.rx : ep.x;
+        const ery = ea ? ea.ry : ep.y;
+        const rx = erx + 0.5 - px;
+        const ry = ery + 0.5 - py;
         const tProj = rx * dx + ry * dy;
         if (tProj < 0.2 || tProj > d) continue;
         if (Math.abs(rx * dy - ry * dx) < 0.47 && tProj < bestT) {
@@ -855,16 +872,16 @@ export class Renderer implements IFx {
 
       const lx = (px + dx * d) * TILE;
       const ly = (py + dy * d) * TILE;
-      const al = this.aimLine.clear().moveTo(px * TILE, py * TILE);
-      if (locked) {
-        al.lineTo((px + dx * bestT) * TILE, (py + dy * bestT) * TILE)
-          .stroke({ color: C_MAGENTA, width: 1.8, alpha: 0.42 })
-          .moveTo(px * TILE, py * TILE)
-          .lineTo(lx, ly)
-          .stroke({ color: C_CYAN, width: 1.5, alpha: 0.1 });
-      } else {
-        al.lineTo(lx, ly).stroke({ color: C_CYAN, width: 1.5, alpha: 0.16 });
-      }
+      this.aimLine.clear();
+      this.aimLine
+        .beginPath()
+        .moveTo(px * TILE, py * TILE)
+        .lineTo(lx, ly)
+        .stroke({
+          color: locked ? C_MAGENTA : C_CYAN,
+          width: 1.5,
+          alpha: locked ? 0.35 : 0.16,
+        });
 
       const chx = (px + dx * bestT) * TILE;
       const chy = (py + dy * bestT) * TILE;
