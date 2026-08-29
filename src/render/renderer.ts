@@ -866,15 +866,10 @@ export class Renderer implements IFx {
       const chy = (py + dy * bestT) * TILE;
       this.crosshair.clear();
       if (locked) {
-        // target-lock reticle: pulsing ring + spinning corner brackets
+        // target-lock reticle: pulsing magenta ring + center dot only
         const pulse = 10.5 + Math.sin(this.time * 9) * 1.3;
         this.crosshair.circle(chx, chy, pulse).stroke({ color: C_MAGENTA, width: 1.8, alpha: 0.95 });
         this.crosshair.circle(chx, chy, 1.9).fill({ color: C_MAGENTA, alpha: 1 });
-        const spin = this.time * 3.2;
-        for (let k = 0; k < 4; k++) {
-          const a0 = spin + (k * TAU) / 4;
-          this.crosshair.arc(chx, chy, 15.5, a0, a0 + 0.75).stroke({ color: 0xffffff, width: 2.2, alpha: 0.9 });
-        }
       } else {
         this.crosshair.circle(chx, chy, 7).stroke({ color: C_CYAN, width: 1.6, alpha: 0.9 });
         this.crosshair.circle(chx, chy, 1.8).fill({ color: C_MAGENTA, alpha: 0.95 });
