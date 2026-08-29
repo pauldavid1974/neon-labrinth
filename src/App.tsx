@@ -1,4 +1,4 @@
-// Neon Labyrinth App Shell - Auto-Deploy Enabled
+// Neon Labyrinth App Shell - Auto-Deploy Verified
 import { useEffect, useRef, useState } from "react";
 import { Game } from "./game/game";
 import { INITIAL_SNAP, type Snap } from "./game/types";
