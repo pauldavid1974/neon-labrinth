@@ -52,7 +52,7 @@ export class DungeonGen implements DungeonMap {
   solid(x: number, y: number): boolean {
     if (!this.inBounds(x, y)) return true;
     const t = this.tiles[this.idx(x, y)];
-    return t === TileT.Wall || t === TileT.Pillar || t === TileT.Crate;
+    return t === TileT.Wall || t === TileT.Pillar || t === TileT.Crate || t === TileT.Barrel || t === TileT.TeslaNode || t === TileT.Shrine;
   }
   walkable(x: number, y: number): boolean {
     return this.inBounds(x, y) && !this.solid(x, y);
@@ -138,8 +138,10 @@ export function generateFloor(map: DungeonGen, plan: FloorPlan, floor: number, r
     if (a !== b) carveCorridor(map, a.cx, a.cy, b.cx, b.cy, rng);
   }
 
-  // --- dress rooms: pillars, crates, doors, vents ---
-  for (const room of plan.rooms) {
+  // --- dress rooms: pillars, crates, barrels, tesla nodes, acid, shrines, doors, vents ---
+  let shrinePlaced = false;
+  for (let i = 0; i < plan.rooms.length; i++) {
+    const room = plan.rooms[i];
     if (room.w >= 8 && room.h >= 8 && rng.chance(0.75)) {
       // pillar ring inside large rooms
       const px0 = room.x + 2;
@@ -156,6 +158,42 @@ export function generateFloor(map: DungeonGen, plan: FloorPlan, floor: number, r
       const cx = rng.int(room.x, room.x + room.w - 1);
       const cy = rng.int(room.y, room.y + room.h - 1);
       if (map.tiles[map.idx(cx, cy)] === TileT.Floor) map.tiles[map.idx(cx, cy)] = TileT.Crate;
+    }
+    // Volatile Core Canisters (Explosive Barrels)
+    if (rng.chance(0.48)) {
+      const barrels = rng.int(1, 2);
+      for (let b = 0; b < barrels; b++) {
+        const bx = rng.int(room.x, room.x + room.w - 1);
+        const by = rng.int(room.y, room.y + room.h - 1);
+        if (map.tiles[map.idx(bx, by)] === TileT.Floor) map.tiles[map.idx(bx, by)] = TileT.Barrel;
+      }
+    }
+    // Tesla Node Relay
+    if (room.w >= 6 && room.h >= 6 && rng.chance(0.35)) {
+      const tx = rng.int(room.x + 1, room.x + room.w - 2);
+      const ty = rng.int(room.y + 1, room.y + room.h - 2);
+      if (map.tiles[map.idx(tx, ty)] === TileT.Floor) map.tiles[map.idx(tx, ty)] = TileT.TeslaNode;
+    }
+    // Acid / Hazard pools (on floor >= 4)
+    if (floor >= 4 && rng.chance(0.42)) {
+      const ax = rng.int(room.x + 1, room.x + room.w - 2);
+      const ay = rng.int(room.y + 1, room.y + room.h - 2);
+      for (let dy = 0; dy <= 1; dy++) {
+        for (let dx = 0; dx <= 1; dx++) {
+          if (map.tiles[map.idx(ax + dx, ay + dy)] === TileT.Floor && rng.chance(0.75)) {
+            map.tiles[map.idx(ax + dx, ay + dy)] = TileT.Acid;
+          }
+        }
+      }
+    }
+    // Overclock Shrine
+    if (!shrinePlaced && i > 0 && rng.chance(0.45)) {
+      const sx = room.cx;
+      const sy = room.cy;
+      if (map.tiles[map.idx(sx, sy)] === TileT.Floor) {
+        map.tiles[map.idx(sx, sy)] = TileT.Shrine;
+        shrinePlaced = true;
+      }
     }
     if (room.w >= 6 && rng.chance(0.5)) {
       plan.vents.push({ x: room.cx, y: room.cy });
@@ -180,6 +218,12 @@ export function generateFloor(map: DungeonGen, plan: FloorPlan, floor: number, r
   clearSpot(map, map.stairsX, map.stairsY);
   map.tiles[map.idx(map.stairsX, map.stairsY)] = TileT.Stairs;
   clearSpot(map, map.spawnX, map.spawnY);
+
+  // --- milestone boss on floor 3, 6, 9... ---
+  if (floor % 3 === 0) {
+    const bossSpot = randomFloorTile(map, best, rng) ?? { x: map.stairsX + 1, y: map.stairsY };
+    plan.enemySpawns.push({ x: bossSpot.x, y: bossSpot.y, kind: "boss_warden" });
+  }
 
   // --- enemy & loot placement (budget scales with depth) ---
   const budget = Math.min(22, 5 + floor * 2);
@@ -209,10 +253,22 @@ export function generateFloor(map: DungeonGen, plan: FloorPlan, floor: number, r
 
 function pickEnemyKind(floor: number, dist: number, rng: Rng): EnemyKind {
   const roll = rng.next();
-  if (floor >= 3 && roll < 0.18 + floor * 0.02) return "goliath";
-  if (floor >= 2 && roll < 0.5) return "sentinel";
-  if (floor < 2 && dist < 12) return "stalker";
-  return roll < 0.62 ? "stalker" : "sentinel";
+  if (floor === 1) {
+    return roll < 0.65 ? "stalker" : "skitterer";
+  }
+  if (floor === 2) {
+    if (roll < 0.35) return "stalker";
+    if (roll < 0.6) return "skitterer";
+    if (roll < 0.85) return "sentinel";
+    return "phantom";
+  }
+  // Floor 3+
+  if (roll < 0.2) return "goliath";
+  if (roll < 0.4) return "sentinel";
+  if (roll < 0.6) return "phantom";
+  if (roll < 0.78) return "sentry";
+  if (roll < 0.9) return "skitterer";
+  return "stalker";
 }
 
 function randomFloorTile(map: DungeonGen, room: RoomInfo, rng: Rng): { x: number; y: number } | null {

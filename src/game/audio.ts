@@ -139,6 +139,31 @@ export class SynthSfx implements ISfx {
       case "denied":
         this.tone("square", 170, 120, 0.12, 0.07);
         break;
+      case "explode":
+        this.noise(0.38, 0.22, 450, 0.7);
+        this.tone("sawtooth", 110, 28, 0.35, 0.18);
+        this.tone("square", 75, 20, 0.45, 0.14, 0.02);
+        break;
+      case "shock":
+        this.tone("sawtooth", 1400, 220, 0.16, 0.12);
+        this.noise(0.12, 0.1, 4800, 3.5);
+        this.tone("square", 880, 440, 0.1, 0.08, 0.03);
+        break;
+      case "scatter":
+        this.tone("square", 820, 280, 0.09, 0.08);
+        this.tone("sawtooth", 740, 210, 0.1, 0.07, 0.02);
+        this.noise(0.08, 0.06, 2800, 1.6);
+        break;
+      case "emp":
+        this.tone("sine", 1200, 80, 0.45, 0.14);
+        this.tone("triangle", 600, 40, 0.38, 0.12, 0.04);
+        this.noise(0.3, 0.09, 1200, 1.2);
+        break;
+      case "shrine":
+        this.tone("sine", 523, 1046, 0.35, 0.1);
+        this.tone("triangle", 659, 1318, 0.4, 0.08, 0.08);
+        this.tone("sine", 784, 1568, 0.5, 0.06, 0.16);
+        break;
     }
   }
 

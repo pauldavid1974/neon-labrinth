@@ -30,8 +30,10 @@ import {
   MAP_W,
   TILE,
   TileT,
+  getBiome,
   type AIComp,
   type Anim,
+  type EliteKind,
   type EnemyKind,
   type GState,
   type GameCtx,
@@ -50,8 +52,20 @@ const ENEMY_TINT: Record<EnemyKind, number> = {
   stalker: 0xff2bd6,
   sentinel: 0xb967ff,
   goliath: 0xff5c33,
+  phantom: 0x9d4edd,
+  skitterer: 0x38bdf8,
+  sentry: 0x2dd4bf,
+  boss_warden: 0xff0055,
 };
-const ENEMY_SCORE: Record<EnemyKind, number> = { stalker: 100, sentinel: 150, goliath: 300 };
+const ENEMY_SCORE: Record<EnemyKind, number> = {
+  stalker: 100,
+  sentinel: 150,
+  goliath: 300,
+  phantom: 250,
+  skitterer: 80,
+  sentry: 200,
+  boss_warden: 2500,
+};
 
 const freshStats = (): PlayerStats => ({
   hp: 100,
@@ -69,8 +83,11 @@ const freshStats = (): PlayerStats => ({
   dashCd: 0,
   fireCd: 0,
   invuln: 0,
+  abilityCd: 0,
+  maxAbilityCd: 7.5,
   lastDx: 1,
   lastDy: 0,
+  relics: [],
 });
 
 export class Game implements GameCtx {
@@ -100,6 +117,7 @@ export class Game implements GameCtx {
     moveCount: 0,
     wantShoot: false,
     wantDash: false,
+    wantAbility: false,
     wantWait: false,
     wantDescend: false,
   };
@@ -171,6 +189,7 @@ export class Game implements GameCtx {
         case "KeyA": case "ArrowLeft": queueMoveIntent(this, -1, 0); break;
         case "KeyD": case "ArrowRight": queueMoveIntent(this, 1, 0); break;
         case "Space": this.input.wantDash = true; break;
+        case "KeyQ": case "KeyF": this.input.wantAbility = true; break;
         case "KeyR": this.input.wantWait = true; break;
         case "KeyE": this.input.wantDescend = true; break;
         case "KeyM": this.toggleMute(); break;
@@ -318,12 +337,30 @@ export class Game implements GameCtx {
     this.stats.onStairs = false;
   }
 
-  private spawnEnemy(kind: EnemyKind, x: number, y: number): void {
+  spawnEnemy(kind: EnemyKind, x: number, y: number): void {
     if (this.hash.get(x, y) >= 0) return; // tile already occupied — skip, never stack entities
     const e = this.world.create();
     const f = this.floor;
-    const maxHp =
-      kind === "stalker" ? 24 + f * 7 : kind === "sentinel" ? 20 + f * 6 : 58 + f * 14;
+    let maxHp = 24 + f * 7;
+    if (kind === "sentinel") maxHp = 20 + f * 6;
+    else if (kind === "goliath") maxHp = 58 + f * 14;
+    else if (kind === "phantom") maxHp = 28 + f * 7;
+    else if (kind === "skitterer") maxHp = 12 + f * 3;
+    else if (kind === "sentry") maxHp = 36 + f * 8;
+    else if (kind === "boss_warden") maxHp = 260 + f * 55;
+
+    let elite: EliteKind | undefined;
+    let shieldHits = 0;
+    if (kind !== "boss_warden" && f >= 2 && this.rng() < 0.16) {
+      const er = this.rng();
+      if (er < 0.4) elite = "volatile";
+      else if (er < 0.7) elite = "hasted";
+      else {
+        elite = "shielded";
+        shieldHits = 2;
+      }
+    }
+
     this.stores.pos.add(e, (c) => { c.x = x; c.y = y; });
     this.stores.anim.add(e, (c) => {
       c.rx = x; c.ry = y; c.fx = x; c.fy = y; c.t = 1; c.delay = 0; c.speed = 8; c.punch = 0;
@@ -331,16 +368,27 @@ export class Game implements GameCtx {
     this.stores.hp.add(e, (c) => { c.hp = maxHp; c.max = maxHp; });
     this.stores.mark.add(e, (c) => { c.tag = "enemy"; });
     this.stores.ai.add(e, (c) => {
-      c.kind = kind; c.pathLen = 0; c.pathIdx = 0; c.cd = 0;
-      c.aggro = false; c.moveTick = 0; c.hurtT = 0;
+      c.kind = kind;
+      c.elite = elite;
+      c.shieldHits = shieldHits;
+      c.bossPhase = kind === "boss_warden" ? 1 : undefined;
+      c.pathLen = 0;
+      c.pathIdx = 0;
+      c.cd = 0;
+      c.aggro = false;
+      c.moveTick = 0;
+      c.hurtT = 0;
     });
     const tint = ENEMY_TINT[kind];
     const vis = this.renderer.makeVisual("enemy", tint, true);
     this.renderer.restyleEnemy(vis, kind, tint);
     this.stores.vis.m.set(e, vis);
-    if (kind === "sentinel") {
+    if (kind === "sentinel" || kind === "boss_warden" || kind === "sentry") {
       this.stores.light.add(e, (c) => {
-        c.r = 2.8; c.color = 0xb967ff; c.base = 0.7; c.phase = this.rng() * 6;
+        c.r = kind === "boss_warden" ? 5.5 : 2.8;
+        c.color = tint;
+        c.base = 0.7;
+        c.phase = this.rng() * 6;
         c.poly = new Array(LIGHT_RAYS * 2).fill(0);
       });
       this.renderer.bindLight(e);
@@ -406,6 +454,7 @@ export class Game implements GameCtx {
       const st = this.stats;
       st.fireCd = Math.max(0, st.fireCd - dtRaw);
       st.dashCd = Math.max(0, st.dashCd - dtRaw);
+      st.abilityCd = Math.max(0, st.abilityCd - dtRaw);
       st.invuln = Math.max(0, st.invuln - dtRaw);
       animationSystem(this, dt);
       if (s === "playing" || s === "dying") this.runTime += dtRaw;
@@ -463,7 +512,8 @@ export class Game implements GameCtx {
     this.floor++;
     this.loadFloor(this.floor);
     this.state = "playing";
-    this.banner = `SECTOR ${String(this.floor).padStart(2, "0")}`;
+    const biome = getBiome(this.floor);
+    this.banner = `${biome.name} // ${biome.code}`;
     this.bannerKey++;
     this.stats.hp = clamp(this.stats.hp + 14, 0, this.stats.maxHp);
     this.stats.score += 500;
@@ -492,34 +542,184 @@ export class Game implements GameCtx {
     }
   }
 
-  /* -------------------------------------------------------------- combat */
+  smashBarrelAt(x: number, y: number): void {
+    if (!this.map.inBounds(x, y)) return;
+    this.map.tiles[this.map.idx(x, y)] = TileT.Floor;
+    this.renderer.redrawCrates(this.map);
+    this.explodeAt(x, y, 1.8, 38 + this.floor * 5, 0xff4d33);
+  }
+
+  shockNodeAt(x: number, y: number): void {
+    if (!this.map.inBounds(x, y)) return;
+    this.map.tiles[this.map.idx(x, y)] = TileT.Floor;
+    this.renderer.redrawCrates(this.map);
+    this.sfx.play("shock");
+    this.fx.burst(x + 0.5, y + 0.5, 0x4df3ff, 22, 4.5, 0.45, 0.14);
+    this.fx.ring(x, y, 0x4df3ff, 2.8);
+    this.fx.shake(5);
+
+    let shocked = 0;
+    for (let i = 0; i < this.world.count && shocked < 3; i++) {
+      const e = this.world.ids[i];
+      const m = this.stores.mark.get(e);
+      if (!m || m.tag !== "enemy") continue;
+      const p = this.stores.pos.get(e);
+      if (!p) continue;
+      const dx = p.x - x;
+      const dy = p.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > 22) continue;
+      this.fx.beam(x, y, p.x, p.y, 0x4df3ff, 2.2);
+      this.damageEnemy(e, 18 + this.floor * 3, dx, dy);
+      const ai = this.stores.ai.get(e);
+      if (ai) ai.cd = Math.max(ai.cd, 2);
+      this.fx.text(p.x, p.y - 0.7, "SHOCK // STUN", "#7ef3ff", 12);
+      shocked++;
+    }
+  }
+
+  useShrineAt(x: number, y: number): void {
+    if (!this.map.inBounds(x, y)) return;
+    const st = this.stats;
+    if (st.hp <= 22) {
+      this.fx.text(x, y - 0.7, "HP TOO LOW", "#ff4d5e", 12);
+      this.sfx.play("denied");
+      return;
+    }
+    st.hp -= 20;
+    st.enRegen += 4;
+    st.maxEn += 20;
+    st.en = st.maxEn;
+    this.map.tiles[this.map.idx(x, y)] = TileT.Floor;
+    this.renderer.redrawCrates(this.map);
+    this.sfx.play("shrine");
+    this.fx.ring(x, y, 0xfbbf24, 3.2);
+    this.fx.burst(x + 0.5, y + 0.5, 0xfbbf24, 30, 4.8, 0.6, 0.16);
+    this.fx.flash(0xfbbf24, 0.35);
+    this.fx.shake(6);
+    this.fx.text(x, y - 0.8, "OVERCLOCKED // +4 REGEN // +20 MAX EN", "#fef08a", 13);
+    this.pushHud();
+  }
+
+  explodeAt(x: number, y: number, radius: number, dmg: number, color: number): void {
+    this.sfx.play("explode");
+    this.fx.flash(color, 0.28);
+    this.fx.shake(Math.min(22, 8 + dmg * 0.35));
+    this.fx.ring(x, y, color, radius * 2.2);
+    this.fx.burst(x + 0.5, y + 0.5, color, 32, 5.5, 0.65, 0.16);
+    this.fx.shards(x + 0.5, y + 0.5, color, 16, 4.8);
+
+    // Break adjacent crates and chain barrels
+    const rInt = Math.ceil(radius);
+    for (let dy = -rInt; dy <= rInt; dy++) {
+      for (let dx = -rInt; dx <= rInt; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const tx = x + dx;
+        const ty = y + dy;
+        if (!this.map.inBounds(tx, ty)) continue;
+        if (dx * dx + dy * dy > (radius + 0.3) * (radius + 0.3)) continue;
+        const t = this.map.tiles[this.map.idx(tx, ty)];
+        if (t === TileT.Crate) {
+          this.smashCrateAt(tx, ty);
+        } else if (t === TileT.Barrel) {
+          this.smashBarrelAt(tx, ty);
+        } else if (t === TileT.TeslaNode) {
+          this.shockNodeAt(tx, ty);
+        }
+      }
+    }
+
+    // Damage enemies in blast radius
+    for (let i = 0; i < this.world.count; i++) {
+      const e = this.world.ids[i];
+      const m = this.stores.mark.get(e);
+      if (!m || m.tag !== "enemy") continue;
+      const p = this.stores.pos.get(e);
+      if (!p) continue;
+      const edx = p.x + 0.5 - (x + 0.5);
+      const edy = p.y + 0.5 - (y + 0.5);
+      const d = Math.sqrt(edx * edx + edy * edy);
+      if (d <= radius + 0.5) {
+        const falloff = Math.max(0.4, 1 - d / (radius + 0.6));
+        const finalDmg = Math.round(dmg * falloff);
+        this.damageEnemy(e, finalDmg, edx, edy);
+        this.fx.text(p.x, p.y - 0.7, `CRIT ${finalDmg}`, "#ff7744", 14);
+      }
+    }
+
+    // Damage player if caught in blast
+    const pp = this.stores.pos.get(this.player);
+    if (pp) {
+      const pdx = pp.x + 0.5 - (x + 0.5);
+      const pdy = pp.y + 0.5 - (y + 0.5);
+      const pd = Math.sqrt(pdx * pdx + pdy * pdy);
+      if (pd <= radius + 0.5) {
+        const playerDmg = Math.round(dmg * 0.45 * Math.max(0.3, 1 - pd / (radius + 0.6)));
+        this.damagePlayer(playerDmg, x, y);
+      }
+    }
+
+    const rays = recomputeFov(this, this.fovPoly);
+    this.renderer.onFovChanged(this.map, this.fovPoly, rays);
+  }
 
   damageEnemy(e: number, dmg: number, kx: number, ky: number): void {
     const h = this.stores.hp.get(e);
     const p = this.stores.pos.get(e);
     if (!h || !p || h.hp <= 0) return;
+
+    const ai = this.stores.ai.get(e);
+    if (ai && ai.shieldHits && ai.shieldHits > 0) {
+      ai.shieldHits--;
+      this.fx.text(p.x, p.y - 0.7, "SHIELD ABSORB", "#2dd4bf", 13);
+      this.fx.ring(p.x, p.y, 0x2dd4bf, 1.4);
+      this.sfx.play("denied");
+      return;
+    }
+
     h.hp -= dmg;
     const v = this.stores.vis.get(e);
     if (v) v.flash = 1;
     const a = this.stores.anim.get(e);
     if (a) a.punch = 1;
-    const ai = this.stores.ai.get(e);
     if (ai) {
       ai.aggro = true;
       ai.hurtT = 4;
     }
-    // knockback one tile along the impact direction
-    const bx = p.x + Math.sign(kx);
-    const by = p.y + Math.sign(ky);
-    if ((kx !== 0 || ky !== 0) && this.map.walkable(bx, by) && this.hash.get(bx, by) < 0) {
-      this.hash.move(e, p.x, p.y, bx, by);
-      p.x = bx;
-      p.y = by;
-      if (a) {
-        a.fx = a.rx; a.fy = a.ry; a.t = 0; a.delay = 0; a.speed = 15;
+
+    // Phantom teleport on hit
+    if (ai && ai.kind === "phantom" && h.hp > 0 && this.rng() < 0.7) {
+      for (let tries = 0; tries < 16; tries++) {
+        const tx = p.x + this.rngInstance.int(-4, 4);
+        const ty = p.y + this.rngInstance.int(-4, 4);
+        if (this.map.walkable(tx, ty) && this.hash.get(tx, ty) < 0) {
+          this.hash.move(e, p.x, p.y, tx, ty);
+          this.fx.burst(p.x + 0.5, p.y + 0.5, 0x9d4edd, 14, 3.5, 0.4, 0.12);
+          p.x = tx;
+          p.y = ty;
+          if (a) {
+            a.rx = tx; a.ry = ty; a.fx = tx; a.fy = ty;
+          }
+          this.fx.burst(tx + 0.5, ty + 0.5, 0x9d4edd, 14, 3.5, 0.4, 0.12);
+          this.fx.text(tx, ty - 0.7, "PHASE", "#c084fc", 12);
+          break;
+        }
       }
-      if (ai) { ai.pathIdx = ai.pathLen; }
+    } else {
+      // knockback one tile along the impact direction
+      const bx = p.x + Math.sign(kx);
+      const by = p.y + Math.sign(ky);
+      if ((kx !== 0 || ky !== 0) && this.map.walkable(bx, by) && this.hash.get(bx, by) < 0) {
+        this.hash.move(e, p.x, p.y, bx, by);
+        p.x = bx;
+        p.y = by;
+        if (a) {
+          a.fx = a.rx; a.fy = a.ry; a.t = 0; a.delay = 0; a.speed = 15;
+        }
+        if (ai) { ai.pathIdx = ai.pathLen; }
+      }
     }
+
     const tint = ai ? ENEMY_TINT[ai.kind] : 0xff2bd6;
     this.fx.text(p.x, p.y - 0.7, `${dmg}`, "#ffffff", 14);
     this.fx.burst(p.x + 0.5, p.y + 0.5, tint, 10, 3.4, 0.35, 0.12);
@@ -533,6 +733,7 @@ export class Game implements GameCtx {
   private killEnemy(e: number, kind: EnemyKind): void {
     const p = this.stores.pos.get(e);
     if (!p) return;
+    const ai = this.stores.ai.get(e);
     this.stats.kills++;
     this.stats.score += Math.round(ENEMY_SCORE[kind] * (1 + 0.25 * (this.floor - 1)));
     const tint = ENEMY_TINT[kind];
@@ -542,12 +743,27 @@ export class Game implements GameCtx {
     this.sfx.play("kill");
     this.hitstopT = Math.max(this.hitstopT, 0.085);
     this.fx.shake(11);
-    // loot drop
-    const roll = this.rng();
-    if (roll < 0.24) this.spawnLoot(p.x, p.y, "heal", this.rngInstance.int(0, 1));
-    else if (roll < 0.38) this.spawnLoot(p.x, p.y, "energy", 0);
-    else if (roll < 0.46)
-      this.spawnLoot(p.x, p.y, "weapon", clamp(this.floor - 1 + this.rngInstance.int(0, 1), 0, WEAPON_TABLE.length - 1));
+
+    // Volatile death explosion
+    if (ai?.elite === "volatile") {
+      this.explodeAt(p.x, p.y, 1.5, 22 + this.floor * 4, 0xff3b4e);
+    }
+
+    // Boss rewards
+    if (kind === "boss_warden") {
+      this.banner = "APEX TERMINATED // SECTOR SECURED";
+      this.bannerKey++;
+      this.spawnLoot(p.x, p.y, "relic", this.rngInstance.int(0, RELIC_NAMES.length - 1));
+      this.spawnLoot(p.x + 1, p.y, "weapon", clamp(this.floor, 1, WEAPON_TABLE.length - 1));
+    } else {
+      // Regular loot drop
+      const roll = this.rng();
+      if (roll < 0.24) this.spawnLoot(p.x, p.y, "heal", this.rngInstance.int(0, 1));
+      else if (roll < 0.38) this.spawnLoot(p.x, p.y, "energy", 0);
+      else if (roll < 0.46)
+        this.spawnLoot(p.x, p.y, "weapon", clamp(this.floor - 1 + this.rngInstance.int(0, 1), 0, WEAPON_TABLE.length - 1));
+    }
+
     this.removeEntity(e);
     this.pushHud();
   }
@@ -645,11 +861,35 @@ export class Game implements GameCtx {
               score: st.score,
               time: `${mm}:${String(ss).padStart(2, "0")}`,
               weapon: st.weapon.name,
+              relics: [...st.relics],
             }
           : null,
       dmgPulse: this.dmgPulse,
+      abilityCd: Math.max(0, Number(st.abilityCd.toFixed(1))),
+      maxAbilityCd: st.maxAbilityCd,
+      relics: [...st.relics],
+      boss: this.getActiveBoss(),
+      biomeName: getBiome(this.floor).name,
     };
     this.onSnap(snap);
+  }
+
+  private getActiveBoss(): Snap["boss"] {
+    for (let i = 0; i < this.world.count; i++) {
+      const e = this.world.ids[i];
+      const ai = this.stores.ai.get(e);
+      if (ai && ai.kind === "boss_warden") {
+        const h = this.stores.hp.get(e);
+        if (h && h.hp > 0) {
+          return {
+            name: `OMEGA WARDEN // APEX SEC-${String(this.floor).padStart(2, "0")}`,
+            hp: Math.max(0, h.hp),
+            maxHp: h.max,
+          };
+        }
+      }
+    }
+    return null;
   }
 
   /* ---------------------------------------------------------- IFx bridge */

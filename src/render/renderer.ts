@@ -27,8 +27,10 @@ import {
   MAP_H,
   LIGHT_RAYS,
   TileT,
+  getBiome,
   type Anim,
   type DungeonMap,
+  type EnemyKind,
   type GameCtx,
   type GridPos,
   type Health,
@@ -401,14 +403,56 @@ export class Renderer implements IFx {
     g.clear();
     for (let y = 0; y < map.h; y++) {
       for (let x = 0; x < map.w; x++) {
-        if (map.tiles[map.idx(x, y)] !== TileT.Crate) continue;
+        const t = map.tiles[map.idx(x, y)];
+        if (
+          t !== TileT.Crate &&
+          t !== TileT.Barrel &&
+          t !== TileT.TeslaNode &&
+          t !== TileT.Acid &&
+          t !== TileT.Shrine
+        ) {
+          continue;
+        }
         const px = x * TILE;
         const py = y * TILE;
         g.rect(px, py, TILE, TILE).fill(this.tileBaseColor(x, y, map.floorSeed));
-        g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x171126);
-        g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0xffb347, width: 1.5, alpha: 0.7 });
-        g.beginPath().moveTo(px + 6, py + 6).lineTo(px + TILE - 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
-        g.beginPath().moveTo(px + TILE - 6, py + 6).lineTo(px + 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
+
+        if (t === TileT.Crate) {
+          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x171126);
+          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0xffb347, width: 1.5, alpha: 0.7 });
+          g.beginPath().moveTo(px + 6, py + 6).lineTo(px + TILE - 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
+          g.beginPath().moveTo(px + TILE - 6, py + 6).lineTo(px + 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
+        } else if (t === TileT.Barrel) {
+          // Volatile Core Canister
+          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x2a0d14);
+          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0xff3b4e, width: 1.5, alpha: 0.85 });
+          g.circle(px + TILE / 2, py + TILE / 2, 5.5).fill({ color: 0xff4d22, alpha: 0.85 });
+          g.circle(px + TILE / 2, py + TILE / 2, 2.8).fill({ color: 0xffe066, alpha: 0.95 });
+          g.beginPath().moveTo(px + 8, py + 4).lineTo(px + 8, py + TILE - 4).stroke({ color: 0xff8833, width: 1, alpha: 0.5 });
+          g.beginPath().moveTo(px + TILE - 8, py + 4).lineTo(px + TILE - 8, py + TILE - 4).stroke({ color: 0xff8833, width: 1, alpha: 0.5 });
+        } else if (t === TileT.TeslaNode) {
+          // Tesla Electrical Relay
+          g.rect(px + 5, py + 5, TILE - 10, TILE - 10).fill(0x061824);
+          g.rect(px + 5, py + 5, TILE - 10, TILE - 10).stroke({ color: 0x00f0ff, width: 1.5, alpha: 0.8 });
+          g.circle(px + TILE / 2, py + TILE / 2, 4.8).stroke({ color: 0x4df3ff, width: 1.5, alpha: 0.9 });
+          g.circle(px + TILE / 2, py + TILE / 2, 2.2).fill({ color: 0x00f0ff, alpha: 0.95 });
+          g.beginPath().moveTo(px + TILE / 2, py + 2).lineTo(px + TILE / 2, py + 6).stroke({ color: 0x4df3ff, width: 1.5, alpha: 0.7 });
+          g.beginPath().moveTo(px + TILE / 2, py + TILE - 6).lineTo(px + TILE / 2, py + TILE - 2).stroke({ color: 0x4df3ff, width: 1.5, alpha: 0.7 });
+        } else if (t === TileT.Acid) {
+          // Acid hazard pool
+          g.rect(px + 2, py + 2, TILE - 4, TILE - 4).fill({ color: 0x062810, alpha: 0.85 });
+          g.rect(px + 2, py + 2, TILE - 4, TILE - 4).stroke({ color: 0x22c55e, width: 1.5, alpha: 0.75 });
+          g.circle(px + 10, py + 12, 2.5).fill({ color: 0x86efac, alpha: 0.9 });
+          g.circle(px + 21, py + 19, 3.2).fill({ color: 0x4ade80, alpha: 0.85 });
+        } else if (t === TileT.Shrine) {
+          // Overclock Shrine
+          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x201502);
+          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0xfbbf24, width: 2, alpha: 0.95 });
+          g.circle(px + TILE / 2, py + TILE / 2, 5.5).fill({ color: 0xfbbf24, alpha: 0.9 });
+          g.circle(px + TILE / 2, py + TILE / 2, 2.2).fill(0xffffff);
+          g.beginPath().moveTo(px + TILE / 2, py + 5).lineTo(px + TILE / 2, py + TILE - 5).stroke({ color: 0xfef08a, width: 1.5, alpha: 0.9 });
+          g.beginPath().moveTo(px + 5, py + TILE / 2).lineTo(px + TILE - 5, py + TILE / 2).stroke({ color: 0xfef08a, width: 1.5, alpha: 0.9 });
+        }
       }
     }
   }
@@ -544,10 +588,12 @@ export class Renderer implements IFx {
   }
 
   /** Recolor an enemy visual per archetype (called after makeVisual). */
-  restyleEnemy(v: VisualComp, kind: "stalker" | "sentinel" | "goliath", tint: number): void {
+  restyleEnemy(v: VisualComp, kind: EnemyKind, tint: number): void {
     const body = v.body as Graphics;
     body.clear();
     v.tint = tint;
+    v.root.scale.set(1);
+
     if (kind === "sentinel") {
       body
         .poly([0, -12, 9, 0, 0, 12, -9, 0])
@@ -569,6 +615,54 @@ export class Renderer implements IFx {
         .fill({ color: 0x04050c, alpha: 0.8 });
       v.bobAmp = 1.2;
       v.root.scale.set(1.22);
+    } else if (kind === "phantom") {
+      body
+        .poly([0, -13, 8, -4, 11, 4, 0, 12, -11, 4, -8, -4])
+        .fill({ color: 0xffffff, alpha: 0.92 })
+        .poly([0, -13, 8, -4, 11, 4, 0, 12, -11, 4, -8, -4])
+        .stroke({ color: tint, width: 1.8, alpha: 0.95 })
+        .circle(0, 0, 4)
+        .fill({ color: 0x1a0628, alpha: 0.9 })
+        .circle(0, 0, 1.8)
+        .fill(tint);
+      v.bobAmp = 2.8;
+    } else if (kind === "skitterer") {
+      body
+        .poly([0, -9, 7, 7, -7, 7])
+        .fill({ color: 0xffffff, alpha: 0.95 })
+        .poly([0, -9, 7, 7, -7, 7])
+        .stroke({ color: tint, width: 1.5, alpha: 0.9 })
+        .circle(0, 1, 2.2)
+        .fill(tint);
+      v.bobAmp = 1.6;
+      v.root.scale.set(0.85);
+    } else if (kind === "sentry") {
+      body
+        .poly([0, -11, 9.5, -5.5, 9.5, 5.5, 0, 11, -9.5, 5.5, -9.5, -5.5])
+        .fill({ color: 0xffffff, alpha: 0.95 })
+        .poly([0, -11, 9.5, -5.5, 9.5, 5.5, 0, 11, -9.5, 5.5, -9.5, -5.5])
+        .stroke({ color: tint, width: 1.8, alpha: 1 })
+        .circle(0, 0, 4)
+        .stroke({ color: 0x00f0ff, width: 1.5, alpha: 0.85 })
+        .circle(0, 0, 1.8)
+        .fill(tint);
+      v.bobAmp = 2.0;
+    } else if (kind === "boss_warden") {
+      body
+        .rect(-17, -17, 34, 34)
+        .fill({ color: 0x1a050f, alpha: 0.98 })
+        .rect(-17, -17, 34, 34)
+        .stroke({ color: tint, width: 2.5, alpha: 1 })
+        .circle(0, 0, 10)
+        .fill({ color: 0xff0055, alpha: 0.85 })
+        .circle(0, 0, 5)
+        .fill(0xffffff)
+        .rect(-19, -4, 6, 8)
+        .fill(0xffffff)
+        .rect(13, -4, 6, 8)
+        .fill(0xffffff);
+      v.bobAmp = 1.0;
+      v.root.scale.set(1.5);
     } else {
       body
         .poly([0, -11, 10, 8, 0, 3.5, -10, 8])

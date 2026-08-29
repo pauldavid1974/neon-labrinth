@@ -22,6 +22,7 @@ import {
   type LootComp,
   type Marker,
   type VisualComp,
+  type WeaponStats,
 } from "./types";
 import type { World } from "../core/ecs";
 
@@ -203,6 +204,8 @@ export function runPlayerIntents(ctx: GameCtx): boolean {
     acted = tryShoot(ctx);
   } else if (inp.wantDash) {
     acted = tryDash(ctx);
+  } else if (inp.wantAbility) {
+    acted = tryUseAbility(ctx);
   } else if (inp.wantWait) {
     const s = ctx.stats;
     s.en = clamp(s.en + 6 + s.enRegen, 0, s.maxEn);
@@ -215,6 +218,7 @@ export function runPlayerIntents(ctx: GameCtx): boolean {
     }
   }
   inp.wantDash = false;
+  inp.wantAbility = false;
   inp.wantWait = false;
   inp.wantDescend = false;
   return acted;
@@ -267,10 +271,28 @@ function tryMove(ctx: GameCtx, dx: number, dy: number): boolean {
     ctx.smashCrateAt(tx, ty);
     return true;
   }
+  if (tile === TileT.Barrel) {
+    ctx.smashBarrelAt(tx, ty);
+    return true;
+  }
+  if (tile === TileT.TeslaNode) {
+    ctx.shockNodeAt(tx, ty);
+    return true;
+  }
+  if (tile === TileT.Shrine) {
+    ctx.useShrineAt(tx, ty);
+    return true;
+  }
   if (tile === TileT.Wall || tile === TileT.Pillar) return false;
 
   moveEntity(ctx, ctx.player, tx, ty, 13, 0);
-  ctx.fx.burst(p.x + dx * 0.4 + 0.1, p.y + dy * 0.4 + 0.5, 0x1a7f9e, 3, 1.6, 0.3, 0.08);
+  if (tile === TileT.Acid) {
+    ctx.damagePlayer(6, tx, ty);
+    ctx.fx.text(tx, ty - 0.7, "-6 ACID", "#22c55e", 12);
+    ctx.fx.burst(tx + 0.5, ty + 0.5, 0x22c55e, 12, 3, 0.4, 0.12);
+  } else {
+    ctx.fx.burst(p.x + dx * 0.4 + 0.1, p.y + dy * 0.4 + 0.5, 0x1a7f9e, 3, 1.6, 0.3, 0.08);
+  }
   tryPickupAt(ctx, tx, ty);
   return true;
 }
@@ -315,6 +337,7 @@ function applyLoot(ctx: GameCtx, l: LootComp): void {
     ctx.fx.burst(px + 0.5, py + 0.5, 0x00f0ff, 22, 4, 0.5, 0.14);
     ctx.sfx.play("weapon");
   } else {
+    if (!s.relics.includes(l.name)) s.relics.push(l.name);
     // relics — permanent buffs
     if (l.tier === 0) {
       s.armor += 2;
@@ -325,10 +348,18 @@ function applyLoot(ctx: GameCtx, l: LootComp): void {
     } else if (l.tier === 2) {
       s.lifesteal += 4;
       ctx.fx.text(px, py - 0.6, `${l.name}  LEECH +4`, "#ff9df0", 13);
+    } else if (l.tier === 3) {
+      s.maxHp += 30;
+      s.hp += 30;
+      ctx.fx.text(px, py - 0.6, `${l.name}  MAX HP +30`, "#ff9df0", 13);
+    } else if (l.tier === 4) {
+      s.maxEn += 30;
+      s.en = s.maxEn;
+      s.maxAbilityCd = Math.max(4.0, s.maxAbilityCd - 1.5);
+      ctx.fx.text(px, py - 0.6, `${l.name}  MAX EN +30 / CD -1.5s`, "#ff9df0", 13);
     } else {
-      s.maxHp += 25;
-      s.hp += 25;
-      ctx.fx.text(px, py - 0.6, `${l.name}  MAX HP +25`, "#ff9df0", 13);
+      s.weapon = { ...s.weapon, bolt: s.weapon.bolt + 6, melee: s.weapon.melee + 6 };
+      ctx.fx.text(px, py - 0.6, `${l.name}  POWER +6`, "#ff9df0", 13);
     }
     ctx.fx.ring(px, py, 0xff2bd6, 1.3);
     ctx.sfx.play("weapon");
@@ -336,18 +367,107 @@ function applyLoot(ctx: GameCtx, l: LootComp): void {
   ctx.pushHud();
 }
 
-export const WEAPON_TABLE = [
-  { name: "PULSE SIDEARM", bolt: 12, melee: 9, cost: 12, color: 0x00f0ff },
-  { name: "ION LANCE", bolt: 18, melee: 11, cost: 13, color: 0x4df3ff },
-  { name: "HEX REPEATER", bolt: 15, melee: 12, cost: 8, color: 0xff2bd6 },
-  { name: "PLASMA MAULER", bolt: 26, melee: 17, cost: 15, color: 0xffb347 },
-  { name: "VOID SINGULARITY", bolt: 36, melee: 22, cost: 17, color: 0xb967ff },
-] as const;
+export const WEAPON_TABLE: WeaponStats[] = [
+  { name: "PULSE SIDEARM", bolt: 14, melee: 10, cost: 10, color: 0x00f0ff, behavior: "beam" },
+  { name: "SCATTER BLASTER", bolt: 11, melee: 14, cost: 12, color: 0xffb347, behavior: "scatter", spread: 0.18 },
+  { name: "TESLA LANCE", bolt: 18, melee: 12, cost: 14, color: 0x4df3ff, behavior: "chain", chainCount: 2 },
+  { name: "NOVA MORTAR", bolt: 28, melee: 18, cost: 18, color: 0xff2bd6, behavior: "aoe", aoeRadius: 1.5 },
+  { name: "VOID SINGULARITY", bolt: 40, melee: 24, cost: 20, color: 0xb967ff, behavior: "rail" },
+];
 
 export const WEAPON_PREFIX = ["IONIZED", "HEXED", "CHROME", "VIRAL", "PHANTOM", "OVERCLOCKED"] as const;
-export const RELIC_NAMES = ["AEGIS PLATING", "FLUX OVERCLOCK", "VAMPIRIC CIRCUIT", "TITAN CORE"] as const;
+export const RELIC_NAMES = [
+  "AEGIS PLATING",
+  "FLUX OVERCLOCK",
+  "VAMPIRIC CIRCUIT",
+  "TITAN CORE",
+  "STATIC DISCHARGE",
+  "CRITICAL MATRIX",
+] as const;
 
 let shootDenyT = 0;
+
+function castWeaponRay(
+  ctx: GameCtx,
+  ox: number,
+  oy: number,
+  dx: number,
+  dy: number,
+  maxDist: number,
+  baseDmg: number,
+  color: number,
+  pierce: boolean,
+): { hitCount: number; hitEnemies: number[]; endT: number; ex: number; ey: number } {
+  const wallDist = rayToWall(ctx.map, ox, oy, ox + dx * maxDist, oy + dy * maxDist, maxDist);
+  const { pos, mark } = st();
+  let bestT = wallDist;
+  const hitEnemies: number[] = [];
+
+  // Check map props (barrels, tesla nodes, crates) along the ray
+  const step = 0.5;
+  for (let t = 0.5; t <= wallDist; t += step) {
+    const gx = Math.floor(ox + dx * t);
+    const gy = Math.floor(oy + dy * t);
+    if (!ctx.map.inBounds(gx, gy)) break;
+    const tile = ctx.map.tiles[ctx.map.idx(gx, gy)];
+    if (tile === TileT.Barrel) {
+      ctx.smashBarrelAt(gx, gy);
+      if (!pierce) {
+        bestT = Math.min(bestT, t);
+        break;
+      }
+    } else if (tile === TileT.TeslaNode) {
+      ctx.shockNodeAt(gx, gy);
+      if (!pierce) {
+        bestT = Math.min(bestT, t);
+        break;
+      }
+    } else if (tile === TileT.Crate && pierce) {
+      ctx.smashCrateAt(gx, gy);
+    }
+  }
+
+  for (let i = 0; i < ctx.world.count; i++) {
+    const e = ctx.world.ids[i];
+    const m = mark.m.get(e);
+    if (!m || m.tag !== "enemy") continue;
+    const p = pos.m.get(e);
+    if (!p) continue;
+    if (ctx.map.visible[ctx.map.idx(p.x, p.y)] !== 1) continue;
+    const rx = p.x + 0.5 - ox;
+    const ry = p.y + 0.5 - oy;
+    const tProj = rx * dx + ry * dy;
+    if (tProj < 0.2 || tProj > wallDist) continue;
+    const perp = Math.abs(rx * dy - ry * dx);
+    if (perp < 0.47) {
+      hitEnemies.push(e);
+      if (tProj < bestT) bestT = tProj;
+    }
+  }
+
+  const endT = pierce ? wallDist : Math.max(0.45, bestT - 0.32);
+  const ex = ox + dx * endT;
+  const ey = oy + dy * endT;
+
+  ctx.fx.beam(ox - 0.5, oy - 0.5, ex - 0.5, ey - 0.5, color, pierce ? 3.0 : 2.1);
+  ctx.fx.burst(ox + dx * 0.5, oy + dy * 0.5, color, 5, 2.4, 0.25, 0.1);
+
+  for (const e of hitEnemies) {
+    const p = pos.m.get(e);
+    if (!p) continue;
+    const tProj = (p.x + 0.5 - ox) * dx + (p.y + 0.5 - oy) * dy;
+    if (pierce || tProj <= bestT + 0.01) {
+      const dmg = Math.max(2, Math.round(baseDmg * (0.85 + ctx.rng() * 0.4)));
+      ctx.damageEnemy(e, dmg, dx, dy);
+    }
+  }
+
+  if (hitEnemies.length === 0) {
+    ctx.fx.ring(ex - 0.5, ey - 0.5, color, 0.5);
+  }
+
+  return { hitCount: hitEnemies.length, hitEnemies, endT, ex, ey };
+}
 
 function tryShoot(ctx: GameCtx): boolean {
   const s = ctx.stats;
@@ -378,56 +498,114 @@ function tryShoot(ctx: GameCtx): boolean {
     dy /= dl;
   }
 
-  const wallDist = rayToWall(ctx.map, ox, oy, ox + dx * 20, oy + dy * 20, 20);
+  const baseAngle = Math.atan2(dy, dx);
+  const behavior = s.weapon.behavior ?? "beam";
 
-  // collect beam hits: enemies whose center lies within 0.42 of the ray, closer than the wall
-  const { pos, mark } = st();
-  let bestT = wallDist;
-  const hits: number[] = hitScratch;
-  let hitCount = 0;
-  for (let i = 0; i < ctx.world.count && hitCount < 16; i++) {
+  if (behavior === "scatter") {
+    ctx.sfx.play("scatter");
+    ctx.fx.shake(3.5);
+    const spread = s.weapon.spread ?? 0.18;
+    for (const offset of [-spread, 0, spread]) {
+      const a = baseAngle + offset;
+      castWeaponRay(ctx, ox, oy, Math.cos(a), Math.sin(a), 14, Math.round(s.weapon.bolt * 0.85), s.weapon.color, false);
+    }
+    return true;
+  }
+
+  if (behavior === "aoe") {
+    ctx.sfx.play("shoot");
+    ctx.fx.shake(4);
+    const res = castWeaponRay(ctx, ox, oy, dx, dy, 16, Math.round(s.weapon.bolt * 0.6), s.weapon.color, false);
+    ctx.explodeAt(Math.floor(res.ex), Math.floor(res.ey), s.weapon.aoeRadius ?? 1.5, s.weapon.bolt, s.weapon.color);
+    return true;
+  }
+
+  if (behavior === "chain") {
+    ctx.sfx.play("shoot");
+    ctx.fx.shake(2.5);
+    const res = castWeaponRay(ctx, ox, oy, dx, dy, 18, s.weapon.bolt, s.weapon.color, false);
+    if (res.hitEnemies.length > 0) {
+      const primaryE = res.hitEnemies[0];
+      const pp = st().pos.m.get(primaryE);
+      if (pp) {
+        const { pos, mark } = st();
+        let chains = 0;
+        const maxChains = s.weapon.chainCount ?? 2;
+        for (let i = 0; i < ctx.world.count && chains < maxChains; i++) {
+          const ce = ctx.world.ids[i];
+          if (ce === primaryE) continue;
+          const cm = mark.m.get(ce);
+          if (!cm || cm.tag !== "enemy") continue;
+          const cp = pos.m.get(ce);
+          if (!cp) continue;
+          if (ctx.map.visible[ctx.map.idx(cp.x, cp.y)] !== 1) continue;
+          const cdx = cp.x - pp.x;
+          const cdy = cp.y - pp.y;
+          const distSq = cdx * cdx + cdy * cdy;
+          if (distSq > 20) continue;
+          ctx.fx.beam(pp.x, pp.y, cp.x, cp.y, 0x4df3ff, 2.5);
+          ctx.damageEnemy(ce, Math.round(s.weapon.bolt * 0.65), cdx, cdy);
+          ctx.fx.burst(cp.x + 0.5, cp.y + 0.5, 0x4df3ff, 8, 2.5, 0.3, 0.1);
+          chains++;
+        }
+        if (chains > 0) ctx.sfx.play("shock");
+      }
+    }
+    return true;
+  }
+
+  if (behavior === "rail") {
+    ctx.sfx.play("shoot");
+    ctx.fx.shake(5);
+    ctx.fx.flash(s.weapon.color, 0.22);
+    castWeaponRay(ctx, ox, oy, dx, dy, 22, s.weapon.bolt, s.weapon.color, true);
+    return true;
+  }
+
+  // Standard beam
+  ctx.sfx.play("shoot");
+  ctx.fx.shake(2.2);
+  castWeaponRay(ctx, ox, oy, dx, dy, 20, s.weapon.bolt, s.weapon.color, s.pierce);
+  return true;
+}
+
+function tryUseAbility(ctx: GameCtx): boolean {
+  const s = ctx.stats;
+  if (s.abilityCd > 0) return false;
+  const px = playerX(ctx);
+  const py = playerY(ctx);
+  if (s.en < 30) {
+    ctx.fx.text(px, py - 0.6, "NO ENERGY", "#ff4d5e", 12);
+    ctx.sfx.play("denied");
+    return false;
+  }
+  s.en -= 30;
+  s.abilityCd = s.maxAbilityCd;
+  ctx.sfx.play("emp");
+  ctx.fx.ring(px, py, 0x00f0ff, 6.2);
+  ctx.fx.burst(px + 0.5, py + 0.5, 0x4df3ff, 32, 5.5, 0.6, 0.16);
+  ctx.fx.flash(0x00f0ff, 0.35);
+  ctx.fx.shake(7.5);
+  ctx.fx.text(px, py - 0.8, "EMP SHOCKWAVE", "#00f0ff", 14);
+
+  const { pos, mark, ai } = st();
+  for (let i = 0; i < ctx.world.count; i++) {
     const e = ctx.world.ids[i];
     const m = mark.m.get(e);
     if (!m || m.tag !== "enemy") continue;
     const p = pos.m.get(e);
     if (!p) continue;
-    if (ctx.map.visible[ctx.map.idx(p.x, p.y)] !== 1) continue; // can't shoot what you can't see
-    const rx = p.x + 0.5 - ox;
-    const ry = p.y + 0.5 - oy;
-    const tProj = rx * dx + ry * dy;
-    if (tProj < 0.2 || tProj > wallDist) continue;
-    const perp = Math.abs(rx * dy - ry * dx); // |cross| = distance to ray line
-    if (perp < 0.47) {
-      hits[hitCount++] = e;
-      if (tProj < bestT) bestT = tProj;
-    }
-  }
+    if (ctx.map.visible[ctx.map.idx(p.x, p.y)] !== 1) continue;
+    const dx = p.x - px;
+    const dy = p.y - py;
+    if (dx * dx + dy * dy > 38) continue;
 
-  // stop the beam at the target's rim (not its center) so it reads as an
-  // impact, never a line through the body
-  const endT = s.pierce ? wallDist : Math.max(0.45, bestT - 0.32);
-  const ex = ox + dx * endT;
-  const ey = oy + dy * endT;
-  ctx.fx.beam(ox - 0.5, oy - 0.5, ex - 0.5, ey - 0.5, s.weapon.color, 2.1);
-  ctx.fx.burst(ox + dx * 0.5 - 0.5 + 0.5, oy + dy * 0.5 - 0.5 + 0.5, s.weapon.color, 5, 2.4, 0.25, 0.1);
-
-  let damaged = false;
-  for (let i = 0; i < hitCount; i++) {
-    const e = hits[i];
-    const p = pos.m.get(e);
-    if (!p) continue;
-    const tProj = (p.x + 0.5 - ox) * dx + (p.y + 0.5 - oy) * dy;
-    if (s.pierce || tProj <= bestT + 0.01) {
-      const dmg = Math.max(2, Math.round(s.weapon.bolt * (0.85 + ctx.rng() * 0.4)));
-      ctx.damageEnemy(e, dmg, dx, dy);
-      damaged = true;
-    }
+    const comp = ai.m.get(e);
+    if (comp) comp.cd = Math.max(comp.cd, 2);
+    ctx.damageEnemy(e, 14 + ctx.floor * 2, dx, dy);
+    ctx.fx.text(p.x, p.y - 0.7, "STUNNED", "#7ef3ff", 12);
+    ctx.fx.burst(p.x + 0.5, p.y + 0.5, 0x4df3ff, 12, 3.2, 0.35, 0.12);
   }
-  if (!damaged) {
-    ctx.fx.ring(ex - 0.5, ey - 0.5, s.weapon.color, 0.5);
-  }
-  ctx.sfx.play("shoot");
-  ctx.fx.shake(2.2);
   return true;
 }
 
@@ -465,7 +643,7 @@ function tryDash(ctx: GameCtx): boolean {
     return false;
   }
   for (let i = 0; i <= steps; i++) {
-    ctx.fx.burst(startX + dx * i + 0.5, startY + dy * i + 0.5, 0x00f0ff, 6, 2.2, 0.35, 0.12);
+ctx.fx.burst(startX + dx * i + 0.5, startY + dy * i + 0.5, 0x00f0ff, 6, 2.2, 0.35, 0.12);
   }
   ctx.sfx.play("dash");
   ctx.fx.shake(3.4);
@@ -475,13 +653,8 @@ function tryDash(ctx: GameCtx): boolean {
 
 /* --------------------------------------------------------- enemy utility AI */
 
-type EnemyAction = "attack" | "shoot" | "advance" | "retreat" | "charge" | "wait";
+type EnemyAction = "attack" | "shoot" | "advance" | "retreat" | "charge" | "shield_ally" | "boss_barrage" | "boss_summon" | "wait";
 
-/**
- * Utility AI: every candidate action gets a heuristic score from the
- * enemy's situation (distance, LoS, hp ratio, cooldowns) and the highest
- * score wins — behavior emerges from weighted rules, not random rolls.
- */
 function decideAction(ctx: GameCtx, e: number, ai: AIComp, dist: number, los: boolean, hpRatio: number): EnemyAction {
   let best: EnemyAction = "wait";
   let bestScore = -1;
@@ -496,19 +669,34 @@ function decideAction(ctx: GameCtx, e: number, ai: AIComp, dist: number, los: bo
     if (dist === 1) consider("attack", 100);
     const aggro = ai.aggro || dist <= 8 || ai.hurtT > 0;
     if (aggro) consider("advance", 82);
-    else consider("advance", 38); // lazy wander toward player
+    else consider("advance", 38);
   } else if (ai.kind === "sentinel") {
-    if (hpRatio < 0.32 && dist <= 3) consider("retreat", 96); // self-preservation
-    else if (dist <= 2) consider("retreat", 90); // kites melee range
+    if (hpRatio < 0.32 && dist <= 3) consider("retreat", 96);
+    else if (dist <= 2) consider("retreat", 90);
     if (los && dist <= 7 && ai.cd <= 0) consider("shoot", 93);
-    if (!los) consider("advance", 76); // reposition for a lane
+    if (!los) consider("advance", 76);
     consider("wait", 28);
-  } else {
-    // goliath
+  } else if (ai.kind === "goliath") {
     if (dist === 1) consider("attack", 100);
     if (ai.cd <= 0 && dist >= 3 && dist <= 5 && los && straightLane(ctx, e, dist)) consider("charge", 92);
-    if (ai.moveTick === 0) consider("advance", 70); // slow: advances every other turn
+    if (ai.moveTick === 0) consider("advance", 70);
     consider("wait", 30);
+  } else if (ai.kind === "skitterer") {
+    if (dist === 1) consider("attack", 100);
+    consider("advance", 90);
+  } else if (ai.kind === "phantom") {
+    if (dist === 1) consider("attack", 100);
+    if (dist <= 10) consider("advance", 85);
+    consider("wait", 30);
+  } else if (ai.kind === "sentry") {
+    if (ai.cd <= 0 && dist <= 6) consider("shield_ally", 94);
+    if (dist <= 2) consider("retreat", 88);
+    consider("wait", 30);
+  } else if (ai.kind === "boss_warden") {
+    if (dist === 1) consider("attack", 100);
+    if (ai.cd <= 0 && los && dist <= 8) consider("boss_barrage", 95);
+    if (hpRatio < 0.5 && ai.cd <= 1 && ctx.rng() < 0.4) consider("boss_summon", 90);
+    consider("advance", 75);
   }
   return best;
 }
@@ -531,7 +719,7 @@ function straightLane(ctx: GameCtx, e: number, dist: number): boolean {
 
 export function enemyTurnSystem(ctx: GameCtx): void {
   if (ctx.state !== "playing") return;
-  const { pos, ai, hp } = st();
+  const { pos, ai, hp, mark } = st();
   const pp = pos.m.get(ctx.player);
   if (!pp) return;
   let order = 0;
@@ -547,66 +735,132 @@ export function enemyTurnSystem(ctx: GameCtx): void {
     const dist = manhattan(p.x, p.y, pp.x, pp.y);
     if (dist > 16) {
       aiC.cd = Math.max(0, aiC.cd - 1);
-      continue; // dormant — too far to care
+      continue;
     }
     const los = dist <= 9 ? hasLoS(ctx.map, p.x, p.y, pp.x, pp.y) : false;
-    const action = decideAction(ctx, e, aiC, dist, los, h.hp / h.max);
-    const delay = order * 0.05;
-    order++;
+    const passes = aiC.elite === "hasted" ? 2 : 1;
 
-    switch (action) {
-      case "attack": {
-        const dmg = aiC.kind === "goliath" ? 16 + ctx.floor * 2 : aiC.kind === "sentinel" ? 8 : 7 + ctx.floor;
-        ctx.damagePlayer(dmg, p.x, p.y);
-        const v = st().vis.m.get(e);
-        if (v) v.flash = Math.max(v.flash, 0.4);
-        ctx.fx.burst(pp.x + 0.5, pp.y + 0.5, 0xff2bd6, 10, 3.4, 0.4, 0.12);
-        break;
-      }
-      case "shoot": {
-        aiC.cd = 2;
-        const dmg = 9 + ctx.floor * 2;
-        ctx.fx.beam(p.x, p.y, pp.x, pp.y, 0xb967ff, 1.8);
-        ctx.fx.burst(pp.x + 0.5, pp.y + 0.5, 0xb967ff, 12, 3, 0.4, 0.12);
-        ctx.sfx.play("enemyshoot");
-        ctx.damagePlayer(dmg, p.x, p.y);
-        break;
-      }
-      case "advance":
-        stepToward(ctx, e, aiC, pp.x, pp.y, delay, aiC.kind === "goliath" ? 5.5 : 8);
-        break;
-      case "retreat":
-        stepAway(ctx, e, p, pp, delay);
-        break;
-      case "charge": {
-        aiC.cd = 3;
-        const dx = Math.sign(pp.x - p.x);
-        const dy = Math.sign(pp.y - p.y);
-        let last = 0;
-        for (let k = 1; k < dist; k++) {
-          const x = p.x + dx * k;
-          const y = p.y + dy * k;
-          if (!ctx.map.walkable(x, y) || ctx.hash.get(x, y) >= 0) break;
-          last = k;
+    for (let pass = 0; pass < passes; pass++) {
+      if (h.hp <= 0) break;
+      const currentDist = manhattan(p.x, p.y, pp.x, pp.y);
+      const action = decideAction(ctx, e, aiC, currentDist, los, h.hp / h.max);
+      const delay = order * 0.04;
+      order++;
+
+      switch (action) {
+        case "attack": {
+          let dmg = 7 + ctx.floor;
+          if (aiC.kind === "boss_warden") dmg = 20 + ctx.floor * 3;
+          else if (aiC.kind === "goliath") dmg = 16 + ctx.floor * 2;
+          else if (aiC.kind === "phantom") dmg = 12 + ctx.floor * 2;
+          else if (aiC.kind === "skitterer") dmg = 14 + ctx.floor;
+
+          ctx.damagePlayer(dmg, p.x, p.y);
+          const v = st().vis.m.get(e);
+          if (v) v.flash = Math.max(v.flash, 0.4);
+          ctx.fx.burst(pp.x + 0.5, pp.y + 0.5, 0xff2bd6, 10, 3.4, 0.4, 0.12);
+
+          if (aiC.kind === "skitterer") {
+            ctx.explodeAt(p.x, p.y, 1.2, 12 + ctx.floor * 2, 0x38bdf8);
+            ctx.removeEntity(e);
+            return;
+          }
+          break;
         }
-        const qx = p.x + dx * last; // resolve the target before moveEntity mutates pos
-        const qy = p.y + dy * last;
-        if (last > 0) {
-          moveEntity(ctx, e, qx, qy, 15, delay);
-          ctx.fx.shake(5);
-          ctx.sfx.play("charge");
+        case "shoot": {
+          aiC.cd = 2;
+          const dmg = 9 + ctx.floor * 2;
+          ctx.fx.beam(p.x, p.y, pp.x, pp.y, 0xb967ff, 1.8);
+          ctx.fx.burst(pp.x + 0.5, pp.y + 0.5, 0xb967ff, 12, 3, 0.4, 0.12);
+          ctx.sfx.play("enemyshoot");
+          ctx.damagePlayer(dmg, p.x, p.y);
+          break;
         }
-        if (manhattan(qx, qy, pp.x, pp.y) === 1) {
-          ctx.damagePlayer(14 + ctx.floor * 2, qx, qy);
-          ctx.fx.burst(pp.x + 0.5, pp.y + 0.5, 0xff5c33, 16, 4, 0.45, 0.13);
+        case "shield_ally": {
+          aiC.cd = 3;
+          let shielded = false;
+          for (let j = 0; j < ctx.world.count; j++) {
+            const oe = ctx.world.ids[j];
+            if (oe === e) continue;
+            const om = mark.m.get(oe);
+            if (!om || om.tag !== "enemy") continue;
+            const oai = ai.m.get(oe);
+            if (!oai || (oai.shieldHits && oai.shieldHits > 0)) continue;
+            const op = pos.m.get(oe);
+            if (!op || manhattan(p.x, p.y, op.x, op.y) > 5) continue;
+            oai.shieldHits = 1;
+            ctx.fx.beam(p.x, p.y, op.x, op.y, 0x2dd4bf, 2.2);
+            ctx.fx.text(op.x, op.y - 0.7, "SHIELDED", "#2dd4bf", 12);
+            ctx.fx.burst(op.x + 0.5, op.y + 0.5, 0x2dd4bf, 8, 2.5, 0.3, 0.1);
+            shielded = true;
+            break;
+          }
+          if (!shielded) stepToward(ctx, e, aiC, pp.x, pp.y, delay, 7);
+          break;
         }
-        break;
+        case "boss_barrage": {
+          aiC.cd = 3;
+          ctx.sfx.play("enemyshoot");
+          ctx.fx.shake(8);
+          ctx.fx.beam(p.x, p.y, pp.x, pp.y, 0xff0055, 3.2);
+          ctx.fx.beam(p.x, p.y, pp.x + 1, pp.y, 0xff0055, 2.0);
+          ctx.fx.beam(p.x, p.y, pp.x - 1, pp.y, 0xff0055, 2.0);
+          ctx.damagePlayer(18 + ctx.floor * 2, p.x, p.y);
+          ctx.fx.burst(pp.x + 0.5, pp.y + 0.5, 0xff0055, 18, 4.5, 0.5, 0.15);
+          break;
+        }
+        case "boss_summon": {
+          aiC.cd = 4;
+          ctx.fx.ring(p.x, p.y, 0x38bdf8, 3.5);
+          ctx.fx.text(p.x, p.y - 0.8, "SUMMON // ADDS", "#38bdf8", 13);
+          for (let s = 0; s < 2; s++) {
+            const sx = p.x + (s === 0 ? 1 : -1);
+            const sy = p.y;
+            if (ctx.map.walkable(sx, sy) && ctx.hash.get(sx, sy) < 0) {
+              ctx.spawnEnemy("skitterer", sx, sy);
+              ctx.fx.burst(sx + 0.5, sy + 0.5, 0x38bdf8, 12, 3, 0.35, 0.12);
+            }
+          }
+          break;
+        }
+        case "advance": {
+          const speed = aiC.kind === "goliath" ? 5.5 : aiC.kind === "skitterer" ? 11 : 8;
+          stepToward(ctx, e, aiC, pp.x, pp.y, delay, speed);
+          break;
+        }
+        case "retreat":
+          stepAway(ctx, e, p, pp, delay);
+          break;
+        case "charge": {
+          aiC.cd = 3;
+          const dx = Math.sign(pp.x - p.x);
+          const dy = Math.sign(pp.y - p.y);
+          let last = 0;
+          for (let k = 1; k < dist; k++) {
+            const x = p.x + dx * k;
+            const y = p.y + dy * k;
+            if (!ctx.map.walkable(x, y) || ctx.hash.get(x, y) >= 0) break;
+            last = k;
+          }
+          const qx = p.x + dx * last;
+          const qy = p.y + dy * last;
+          if (last > 0) {
+            moveEntity(ctx, e, qx, qy, 15, delay);
+            ctx.fx.shake(5);
+            ctx.sfx.play("charge");
+          }
+          if (manhattan(qx, qy, pp.x, pp.y) === 1) {
+            ctx.damagePlayer(14 + ctx.floor * 2, qx, qy);
+            ctx.fx.burst(pp.x + 0.5, pp.y + 0.5, 0xff5c33, 16, 4, 0.45, 0.13);
+          }
+          break;
+        }
+        case "wait":
+          break;
       }
-      case "wait":
-        break;
     }
     if (aiC.hurtT > 0) aiC.hurtT--;
-    aiC.cd = Math.max(0, aiC.cd - (action === "shoot" || action === "charge" ? 0 : 1));
+    aiC.cd = Math.max(0, aiC.cd - 1);
     if (aiC.kind === "goliath") aiC.moveTick = (aiC.moveTick + 1) % 2;
   }
 }
