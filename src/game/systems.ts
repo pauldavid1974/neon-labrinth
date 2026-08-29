@@ -136,30 +136,42 @@ export function recomputeFov(ctx: GameCtx, polyOut: Float32Array): number {
 
 export interface RepeatState {
   t: number;
+  heldPrev: boolean;
 }
 
-/** Hold-to-repeat movement + held mouse fire intent. Discrete keys are queued by the Game on keydown. */
+/**
+ * Hold-to-repeat movement + held mouse fire intent. Discrete keys are queued
+ * by the Game on keydown (one step per press). Auto-repeat only kicks in
+ * after an initial delay while the key stays held — this prevents the classic
+ * "two steps per tap" bug where the repeat timer fires on the very first
+ * frame after a fresh keydown.
+ */
 export function inputSystem(ctx: GameCtx, dt: number, keys: ReadonlySet<string>, rep: RepeatState): void {
   rep.t -= dt;
-  if (ctx.state !== "playing") return;
-  if (rep.t <= 0) {
-    let dx = 0;
-    let dy = 0;
-    if (keys.has("KeyW") || keys.has("ArrowUp")) dy = -1;
-    else if (keys.has("KeyS") || keys.has("ArrowDown")) dy = 1;
-    else if (keys.has("KeyA") || keys.has("ArrowLeft")) dx = -1;
-    else if (keys.has("KeyD") || keys.has("ArrowRight")) dx = 1;
-    if (dx !== 0 || dy !== 0) {
-      queueMoveIntent(ctx, dx, dy);
-      rep.t = 0.165;
-    }
+  if (ctx.state !== "playing") {
+    rep.heldPrev = false;
+    ctx.input.wantShoot = false;
+    return;
+  }
+  let dx = 0;
+  let dy = 0;
+  if (keys.has("KeyW") || keys.has("ArrowUp")) dy = -1;
+  else if (keys.has("KeyS") || keys.has("ArrowDown")) dy = 1;
+  else if (keys.has("KeyA") || keys.has("ArrowLeft")) dx = -1;
+  else if (keys.has("KeyD") || keys.has("ArrowRight")) dx = 1;
+  const held = dx !== 0 || dy !== 0;
+  if (held && !rep.heldPrev) rep.t = 0.3; // fresh press: the keydown intent already moved us once
+  rep.heldPrev = held;
+  if (held && rep.t <= 0) {
+    queueMoveIntent(ctx, dx, dy);
+    rep.t = 0.16;
   }
   ctx.input.wantShoot = ctx.input.lmbHeld;
 }
 
 export function queueMoveIntent(ctx: GameCtx, dx: number, dy: number): void {
   const inp = ctx.input;
-  if (inp.moveCount < 3) {
+  if (inp.moveCount < 2) {
     inp.moveQueue[inp.moveCount * 2] = dx;
     inp.moveQueue[inp.moveCount * 2 + 1] = dy;
     inp.moveCount++;
@@ -369,6 +381,7 @@ function tryShoot(ctx: GameCtx): boolean {
     if (!m || m.tag !== "enemy") continue;
     const p = pos.m.get(e);
     if (!p) continue;
+    if (ctx.map.visible[ctx.map.idx(p.x, p.y)] !== 1) continue; // can't shoot what you can't see
     const rx = p.x + 0.5 - ox;
     const ry = p.y + 0.5 - oy;
     const tProj = rx * dx + ry * dy;

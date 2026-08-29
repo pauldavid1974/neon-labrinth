@@ -105,7 +105,7 @@ export class Game implements GameCtx {
   };
 
   private keys = new Set<string>();
-  private repeat: RepeatState = { t: 0 };
+  private repeat: RepeatState = { t: 0, heldPrev: false };
   private hitstopT = 0;
   private timeScale = 1;
   private targetTimeScale = 1;
@@ -249,6 +249,8 @@ export class Game implements GameCtx {
     this.loadFloor(1);
     this.state = "playing";
     this.clearInputQueue();
+    this.repeat.t = 0;
+    this.repeat.heldPrev = false;
     this.fx.flash(0x8ffcff, 0.35);
     this.pushHud();
   }

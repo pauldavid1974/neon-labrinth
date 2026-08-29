@@ -828,16 +828,57 @@ export class Renderer implements IFx {
       const dl = Math.sqrt(dx * dx + dy * dy) || 1;
       dx /= dl;
       dy /= dl;
-      this.aimLine
-        .clear()
-        .moveTo(px * TILE, py * TILE)
-        .lineTo((px + dx * d) * TILE, (py + dy * d) * TILE)
-        .stroke({ color: C_CYAN, width: 1.5, alpha: 0.16 });
-      const chx = (px + dx * d) * TILE;
-      const chy = (py + dy * d) * TILE;
+
+      // snap the reticle onto the nearest visible enemy lying on the aim ray,
+      // mirroring the beam's hit test so aim feedback == actual shot result
+      let bestT = d;
+      let locked = false;
+      for (let i = 0; i < ctx.world.count; i++) {
+        const e = ctx.world.ids[i];
+        const m = markS.m.get(e);
+        if (!m || m.tag !== "enemy") continue;
+        const ep = posS.m.get(e);
+        if (!ep || map.visible[map.idx(ep.x, ep.y)] !== 1) continue;
+        const rx = ep.x + 0.5 - px;
+        const ry = ep.y + 0.5 - py;
+        const tProj = rx * dx + ry * dy;
+        if (tProj < 0.2 || tProj > d) continue;
+        if (Math.abs(rx * dy - ry * dx) < 0.42 && tProj < bestT) {
+          bestT = tProj;
+          locked = true;
+        }
+      }
+
+      const lx = (px + dx * d) * TILE;
+      const ly = (py + dy * d) * TILE;
+      const al = this.aimLine.clear().moveTo(px * TILE, py * TILE);
+      if (locked) {
+        al.lineTo((px + dx * bestT) * TILE, (py + dy * bestT) * TILE)
+          .stroke({ color: C_MAGENTA, width: 1.8, alpha: 0.42 })
+          .moveTo(px * TILE, py * TILE)
+          .lineTo(lx, ly)
+          .stroke({ color: C_CYAN, width: 1.5, alpha: 0.1 });
+      } else {
+        al.lineTo(lx, ly).stroke({ color: C_CYAN, width: 1.5, alpha: 0.16 });
+      }
+
+      const chx = (px + dx * bestT) * TILE;
+      const chy = (py + dy * bestT) * TILE;
       this.crosshair.clear();
-      this.crosshair.circle(chx, chy, 7).stroke({ color: C_CYAN, width: 1.6, alpha: 0.9 });
-      this.crosshair.circle(chx, chy, 1.8).fill({ color: C_MAGENTA, alpha: 0.95 });
+      if (locked) {
+        // target-lock reticle: pulsing ring + spinning corner brackets
+        const pulse = 10.5 + Math.sin(this.time * 9) * 1.3;
+        this.crosshair.circle(chx, chy, pulse).stroke({ color: C_MAGENTA, width: 1.8, alpha: 0.95 });
+        this.crosshair.circle(chx, chy, 1.9).fill({ color: C_MAGENTA, alpha: 1 });
+        const spin = this.time * 3.2;
+        for (let k = 0; k < 4; k++) {
+          const a0 = spin + (k * TAU) / 4;
+          this.crosshair.arc(chx, chy, 15.5, a0, a0 + 0.75).stroke({ color: 0xffffff, width: 2.2, alpha: 0.9 });
+        }
+      } else {
+        this.crosshair.circle(chx, chy, 7).stroke({ color: C_CYAN, width: 1.6, alpha: 0.9 });
+        this.crosshair.circle(chx, chy, 1.8).fill({ color: C_MAGENTA, alpha: 0.95 });
+      }
     }
 
     /* beams / rings / texts */
