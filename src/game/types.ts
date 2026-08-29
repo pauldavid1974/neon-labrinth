@@ -206,6 +206,8 @@ export interface GameCtx {
   state: GState;
   input: InputState;
   setState(s: GState): void;
+  /** Fully tear down an entity: visual, light, hash entry, then destroy. */
+  removeEntity(e: number): void;
   damageEnemy(e: number, dmg: number, kx: number, ky: number, silent?: boolean): void;
   damagePlayer(dmg: number, fromX: number, fromY: number): void;
   smashCrateAt(x: number, y: number): void;

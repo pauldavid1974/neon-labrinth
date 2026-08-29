@@ -470,6 +470,14 @@ export class Game implements GameCtx {
     this.pushHud();
   }
 
+  removeEntity(e: number): void {
+    const p = this.stores.pos.get(e);
+    if (p) this.hash.remove(p.x, p.y, e);
+    this.renderer.unbindLight(e);
+    this.renderer.detachVisual(e, this.stores.vis);
+    this.world.queueDestroy(e);
+  }
+
   smashCrateAt(x: number, y: number): void {
     this.map.tiles[this.map.idx(x, y)] = TileT.Floor;
     this.renderer.redrawCrates(this.map);
@@ -540,10 +548,7 @@ export class Game implements GameCtx {
     else if (roll < 0.38) this.spawnLoot(p.x, p.y, "energy", 0);
     else if (roll < 0.46)
       this.spawnLoot(p.x, p.y, "weapon", clamp(this.floor - 1 + this.rngInstance.int(0, 1), 0, WEAPON_TABLE.length - 1));
-    this.renderer.unbindLight(e);
-    this.renderer.detachVisual(e, this.stores.vis);
-    this.hash.remove(p.x, p.y, e);
-    this.world.queueDestroy(e);
+    this.removeEntity(e);
     this.pushHud();
   }
 

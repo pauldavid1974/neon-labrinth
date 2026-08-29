@@ -286,7 +286,7 @@ function tryPickupAt(ctx: GameCtx, x: number, y: number): void {
     const p = pos.m.get(e);
     if (!p || p.x !== x || p.y !== y) continue;
     applyLoot(ctx, l);
-    ctx.world.queueDestroy(e);
+    ctx.removeEntity(e); // detach visual + light + hash entry, then destroy
     return;
   }
 }
