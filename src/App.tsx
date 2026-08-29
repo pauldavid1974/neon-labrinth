@@ -1,4 +1,4 @@
-// Neon Labyrinth App Shell - Auto-Deploy Verified
+// Neon Labyrinth App Shell - Production Live on Minisforum
 import { useEffect, useRef, useState } from "react";
 import { Game } from "./game/game";
 import { INITIAL_SNAP, type Snap } from "./game/types";
