@@ -171,10 +171,16 @@ export function inputSystem(ctx: GameCtx, dt: number, keys: ReadonlySet<string>,
 
 export function queueMoveIntent(ctx: GameCtx, dx: number, dy: number): void {
   const inp = ctx.input;
-  if (inp.moveCount < 2) {
-    inp.moveQueue[inp.moveCount * 2] = dx;
-    inp.moveQueue[inp.moveCount * 2 + 1] = dy;
-    inp.moveCount++;
+  // Single-slot buffer: at most one pending step, so one input can never
+  // translate into a multi-tile glide.
+  if (inp.moveCount === 0) {
+    inp.moveQueue[0] = dx;
+    inp.moveQueue[1] = dy;
+    inp.moveCount = 1;
+  } else {
+    // overwrite with the freshest direction so turning feels immediate
+    inp.moveQueue[0] = dx;
+    inp.moveQueue[1] = dy;
   }
 }
 
@@ -184,10 +190,14 @@ export function runPlayerIntents(ctx: GameCtx): boolean {
   const inp = ctx.input;
   let acted = false;
   if (inp.moveCount > 0) {
+    // Tween gate: don't start the next tile until the current step has
+    // visually landed (t >= 0.5). Combined with the single-slot buffer this
+    // guarantees exactly one tile per input — no double-step glides.
+    const pa = st().anim.m.get(ctx.player);
+    if (pa && pa.delay <= 0 && pa.t < 0.5) return false;
     const dx = inp.moveQueue[0];
     const dy = inp.moveQueue[1];
-    for (let i = 2; i < inp.moveCount * 2; i++) inp.moveQueue[i - 2] = inp.moveQueue[i];
-    inp.moveCount--;
+    inp.moveCount = 0;
     acted = tryMove(ctx, dx, dy);
   } else if (inp.wantShoot) {
     acted = tryShoot(ctx);
@@ -387,7 +397,7 @@ function tryShoot(ctx: GameCtx): boolean {
     const tProj = rx * dx + ry * dy;
     if (tProj < 0.2 || tProj > wallDist) continue;
     const perp = Math.abs(rx * dy - ry * dx); // |cross| = distance to ray line
-    if (perp < 0.42) {
+    if (perp < 0.47) {
       hits[hitCount++] = e;
       if (tProj < bestT) bestT = tProj;
     }

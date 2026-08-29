@@ -33,9 +33,69 @@ export function computeFov(
   radius: number,
   polyOut: Float32Array,
 ): number {
-  map.visible.fill(0, 0, map.w * map.h);
-  castPoly(map, cx + 0.5, cy + 0.5, radius, FOV_RAYS, polyOut, true);
+  castPoly(map, cx + 0.5, cy + 0.5, radius, FOV_RAYS, polyOut);
+  // The polygon above is only for the visual mask; the gameplay `visible`
+  // grid needs full per-cell coverage (rays alone leave angular gaps), so we
+  // raycast origin→center for every cell in the radius bbox below.
+  markVisibility(map, cx, cy, radius);
   return FOV_RAYS;
+}
+
+/**
+ * Per-cell visibility: for each cell inside the radius we run a short
+ * center-to-center DDA; the cell is visible iff no solid tile is crossed
+ * first. Runs at turn frequency (~360 short rays) — negligible cost, and it
+ * makes "is that enemy in my FoV?" exact instead of ray-splat approximate.
+ */
+function markVisibility(map: DungeonMap, cx: number, cy: number, radius: number): void {
+  map.visible.fill(0, 0, map.w * map.h);
+  map.visible[map.idx(cx, cy)] = 1;
+  const r = Math.ceil(radius);
+  const r2 = radius * radius;
+  const ox = cx + 0.5;
+  const oy = cy + 0.5;
+  for (let y = cy - r; y <= cy + r; y++) {
+    if (y < 0 || y >= map.h) continue;
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 0 || x >= map.w) continue;
+      const ddx = x - cx;
+      const ddy = y - cy;
+      if (ddx * ddx + ddy * ddy > r2) continue;
+      if (x === cx && y === cy) continue;
+      if (cellReachable(map, ox, oy, x, y)) map.visible[map.idx(x, y)] = 1;
+    }
+  }
+}
+
+/** DDA from (ox,oy) to the center of (tx,ty); true if no solid cell is entered first. */
+function cellReachable(map: DungeonMap, ox: number, oy: number, tx: number, ty: number): boolean {
+  const dx = tx + 0.5 - ox;
+  const dy = ty + 0.5 - oy;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const ndx = dx / len;
+  const ndy = dy / len;
+  let x = Math.floor(ox);
+  let y = Math.floor(oy);
+  const stepX = ndx > 0 ? 1 : -1;
+  const stepY = ndy > 0 ? 1 : -1;
+  const tDeltaX = Math.abs(1 / (ndx || 1e-9));
+  const tDeltaY = Math.abs(1 / (ndy || 1e-9));
+  let tMaxX = tDeltaX * (ndx > 0 ? x + 1 - ox : ox - x);
+  let tMaxY = tDeltaY * (ndy > 0 ? y + 1 - oy : oy - y);
+  for (let g = 0; g < 64; g++) {
+    if (x === tx && y === ty) return true; // arrived unobstructed
+    const tile = map.tiles[y * map.w + x];
+    if (tile === 1 || tile === 4 || tile === 5) return false; // wall/pillar/crate blocks
+    if (tMaxX < tMaxY) {
+      tMaxX += tDeltaX;
+      x += stepX;
+    } else {
+      tMaxY += tDeltaY;
+      y += stepY;
+    }
+    if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
+  }
+  return false;
 }
 
 export type PolyOut = Float32Array | number[];
@@ -48,7 +108,7 @@ export function castLightPoly(
   radius: number,
   polyOut: PolyOut,
 ): number {
-  return castPoly(map, cx, cy, radius, LIGHT_RAYS, polyOut, false);
+  return castPoly(map, cx, cy, radius, LIGHT_RAYS, polyOut);
 }
 
 function castPoly(
@@ -58,10 +118,8 @@ function castPoly(
   radius: number,
   rays: number,
   out: PolyOut,
-  markVisible: boolean,
 ): number {
-  const { w, h, tiles, visible } = map;
-  const r2 = radius * radius;
+  const { w, h, tiles } = map;
   for (let i = 0; i < rays; i++) {
     const ang = ((i + jitter[i]) / rays) * TAU_SAFE;
     const dx = Math.cos(ang);
@@ -87,11 +145,6 @@ function castPoly(
         break;
       }
       const ti = y * w + x;
-      if (markVisible) {
-        const ddx = x + 0.5 - ox;
-        const ddy = y + 0.5 - oy;
-        if (ddx * ddx + ddy * ddy <= r2) visible[ti] = 1;
-      }
       const tile = tiles[ti];
       if (tile === 1 || tile === 4 || tile === 5) {
         // solid wall/pillar/crate — stop just before the face

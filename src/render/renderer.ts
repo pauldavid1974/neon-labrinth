@@ -843,7 +843,7 @@ export class Renderer implements IFx {
         const ry = ep.y + 0.5 - py;
         const tProj = rx * dx + ry * dy;
         if (tProj < 0.2 || tProj > d) continue;
-        if (Math.abs(rx * dy - ry * dx) < 0.42 && tProj < bestT) {
+        if (Math.abs(rx * dy - ry * dx) < 0.47 && tProj < bestT) {
           bestT = tProj;
           locked = true;
         }
