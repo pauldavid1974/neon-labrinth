@@ -72,25 +72,34 @@ phase-dash through danger. Runs take minutes; the descent takes forever.
   particle bursts, floating combat text, target-lock reticle.
 - **Zero external assets** — every texture is computed per-pixel at boot,
   every sound is synthesized live with WebAudio.
+- **Mobile & Touch Controls** — responsive on-screen virtual D-Pad, smart auto-aiming Fire button, Phase Dash, EMP shockwave, and stairs descent with haptic feedback.
+- **Dynamic Synthesizer Drone** — WebAudio drone modulates base frequencies and resonance dynamically per sector biome.
+- **Endgame Weaponry & Relics** — Chrono Tachyon piercing stun beam, Overcharge Matrix 2.2x critical strike relic, and 5 tiers of cyber-arsenal.
 - **Complete furniture** — title, pause and death screens, HUD with health,
   energy, weapon, armor, sector, kills and score, control guide, mute,
   minimap.
 
 ## Controls
 
-| Input            | Action                                        |
-| ---------------- | --------------------------------------------- |
-| `WASD` / arrows  | Move / bump-attack / smash crates             |
-| Mouse            | Aim the laser sight (locks onto enemies)      |
-| Left click       | Fire weapon bolt (costs energy)               |
-| `Space`          | Phase-dash 2 tiles with brief invulnerability |
-| `R`              | Vent — skip turn, recover energy              |
-| `E`              | Descend at the stairwell                      |
-| `Esc` / `P`      | Pause                                         |
-| `M`              | Mute                                          |
-| `Enter`          | Start / restart run                           |
+| Desktop Input   | Touch / Mobile | Action                                        |
+| --------------- | -------------- | --------------------------------------------- |
+| `WASD` / arrows | Virtual D-Pad  | Move / bump-attack / smash crates             |
+| Mouse           | Touch Tap      | Aim the laser sight (locks onto targets)      |
+| Left click      | `FIRE` Button  | Fire weapon bolt (smart auto-aims if neutral) |
+| `Space`         | `DASH` Button  | Phase-dash 2 tiles with brief invulnerability |
+| `Q` / `F`       | `EMP` Button   | EMP Shockwave (stuns enemies in radius)       |
+| `R`             | `VENT` Button  | Vent — skip turn, recover energy              |
+| `E`             | `DESCEND`      | Descend at the stairwell                      |
+| `Esc` / `P`     | —              | Pause                                         |
+| `M`             | `SOUND` Button | Toggle Audio Mute                             |
+| —               | `TOUCH` Button | Toggle Touch Controls on/off                  |
 
-Best played on desktop with a keyboard and mouse.
+---
+
+## Live Deployment
+
+Play live from any device on the network:
+👉 **[https://gitserver.tail97bf76.ts.net/neon-labrinth/](https://gitserver.tail97bf76.ts.net/neon-labrinth/)**
 
 ---
 
