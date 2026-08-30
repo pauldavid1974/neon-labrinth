@@ -89,7 +89,7 @@ export type GState = "title" | "playing" | "paused" | "transition" | "dying" | "
 export type EnemyKind = "stalker" | "sentinel" | "goliath" | "phantom" | "skitterer" | "sentry" | "boss_warden";
 export type EliteKind = "volatile" | "hasted" | "shielded";
 
-export type WeaponBehavior = "beam" | "scatter" | "chain" | "aoe" | "rail";
+export type WeaponBehavior = "beam" | "scatter" | "chain" | "aoe" | "rail" | "chrono";
 
 export interface WeaponStats {
   name: string;
@@ -246,7 +246,9 @@ export type SfxName =
   | "shock"
   | "scatter"
   | "emp"
-  | "shrine";
+  | "shrine"
+  | "chrono"
+  | "crit";
 
 export interface ISfx {
   play(name: SfxName): void;

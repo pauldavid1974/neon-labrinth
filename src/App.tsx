@@ -31,6 +31,9 @@ export default function App() {
         onResume={() => gameRef.current?.setState("playing")}
         onRestart={() => gameRef.current?.startRun()}
         onAbandon={() => gameRef.current?.abandonRun()}
+        onMove={(dx, dy) => gameRef.current?.triggerMove(dx, dy)}
+        onAction={(act) => gameRef.current?.triggerAction(act)}
+        onToggleSound={() => gameRef.current?.toggleMute()}
       />
     </div>
   );

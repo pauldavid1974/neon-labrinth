@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import type { Snap } from "../game/types";
 
 interface UIProps {
@@ -6,6 +7,9 @@ interface UIProps {
   onResume: () => void;
   onRestart: () => void;
   onAbandon: () => void;
+  onMove?: (dx: number, dy: number) => void;
+  onAction?: (action: "shoot" | "dash" | "ability" | "wait" | "descend") => void;
+  onToggleSound?: () => void;
 }
 
 function ControlsGuide({ compact }: { compact?: boolean }) {
@@ -79,8 +83,147 @@ function StatChip({ label, value, sub, accent }: { label: string; value: string 
   );
 }
 
-export function UI({ snap, onStart, onResume, onRestart, onAbandon }: UIProps) {
-  const inGame = snap.state === "playing" || snap.state === "paused" || snap.state === "dying" || snap.state === "transition";
+function TouchControls({
+  snap,
+  onMove,
+  onAction,
+}: {
+  snap: Snap;
+  onMove?: (dx: number, dy: number) => void;
+  onAction?: (action: "shoot" | "dash" | "ability" | "wait" | "descend") => void;
+}) {
+  const haptic = () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(15);
+    } catch {}
+  };
+
+  const handleMove = (dx: number, dy: number) => {
+    haptic();
+    onMove?.(dx, dy);
+  };
+
+  const handleAction = (act: "shoot" | "dash" | "ability" | "wait" | "descend") => {
+    haptic();
+    onAction?.(act);
+  };
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-30 flex items-end justify-between p-3 sm:p-6 select-none">
+      {/* Left: D-PAD */}
+      <div className="pointer-events-auto flex flex-col items-center gap-1.5 pb-2">
+        <button
+          className="touch-btn notch-sm w-14 h-14 text-xl font-bold"
+          onClick={() => handleMove(0, -1)}
+          aria-label="Up"
+        >
+          ▲
+        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            className="touch-btn notch-sm w-14 h-14 text-xl font-bold"
+            onClick={() => handleMove(-1, 0)}
+            aria-label="Left"
+          >
+            ◀
+          </button>
+          <button
+            className="touch-btn amber notch-sm w-14 h-14 text-[10px] tracking-[0.1em] font-bold"
+            onClick={() => handleAction("wait")}
+            aria-label="Vent"
+          >
+            VENT
+          </button>
+          <button
+            className="touch-btn notch-sm w-14 h-14 text-xl font-bold"
+            onClick={() => handleMove(1, 0)}
+            aria-label="Right"
+          >
+            ▶
+          </button>
+        </div>
+        <button
+          className="touch-btn notch-sm w-14 h-14 text-xl font-bold"
+          onClick={() => handleMove(0, 1)}
+          aria-label="Down"
+        >
+          ▼
+        </button>
+      </div>
+
+      {/* Right: ACTION DIAMOND */}
+      <div className="pointer-events-auto flex flex-col items-end gap-2 pb-2">
+        {/* Stairs button when prompt active */}
+        {snap.prompt && (
+          <button
+            className="touch-btn magenta notch-sm w-full py-2.5 px-4 mb-1 text-xs font-bold tracking-[0.2em] pulse-soft flex items-center justify-center gap-2"
+            onClick={() => handleAction("descend")}
+          >
+            <span>DESCEND ⬇</span>
+          </button>
+        )}
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            className="touch-btn magenta notch w-16 h-16 text-[11px] font-black tracking-[0.1em] flex flex-col items-center justify-center leading-tight"
+            onClick={() => handleAction("ability")}
+            disabled={snap.abilityCd > 0}
+            style={{ opacity: snap.abilityCd > 0 ? 0.45 : 1 }}
+          >
+            <span>EMP</span>
+            <span className="text-[8px] opacity-80 tabular-nums">
+              {snap.abilityCd > 0 ? `${snap.abilityCd.toFixed(1)}s` : "READY"}
+            </span>
+          </button>
+
+          <button
+            className="touch-btn amber notch w-16 h-16 text-[11px] font-black tracking-[0.1em] flex flex-col items-center justify-center leading-tight"
+            onClick={() => handleAction("dash")}
+          >
+            <span>DASH</span>
+            <span className="text-[8px] opacity-80">PHASE</span>
+          </button>
+        </div>
+
+        {/* FIRE BUTTON - PRIMARY */}
+        <button
+          className="touch-btn notch w-[138px] h-16 text-base font-black tracking-[0.25em] bg-cyan-500/20 border-cyan-400 text-cyan-100 shadow-[0_0_24px_rgba(0,240,255,0.35)]"
+          onClick={() => handleAction("shoot")}
+        >
+          🎯 FIRE
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function UI({
+  snap,
+  onStart,
+  onResume,
+  onRestart,
+  onAbandon,
+  onMove,
+  onAction,
+  onToggleSound,
+}: UIProps) {
+  const [showTouch, setShowTouch] = useState<boolean>(() => {
+    try {
+      return (
+        "ontouchstart" in window ||
+        (typeof navigator !== "undefined" && navigator.maxTouchPoints > 0)
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  const inGame =
+    snap.state === "playing" ||
+    snap.state === "paused" ||
+    snap.state === "dying" ||
+    snap.state === "transition";
+
   return (
     <div className="absolute inset-0 pointer-events-none select-none" style={{ zIndex: 40 }}>
       {/* damage vignette pulse */}
@@ -89,7 +232,7 @@ export function UI({ snap, onStart, onResume, onRestart, onAbandon }: UIProps) {
       {/* ------------------------------------------------ HUD */}
       {inGame && (
         <>
-          <div className="absolute top-4 left-4 flex flex-col gap-2 w-[340px] max-w-[44vw]">
+          <div className="absolute top-4 left-4 flex flex-col gap-2 w-[340px] max-w-[44vw] pointer-events-auto">
             <div className="hud-panel notch px-4 py-3 flex flex-col gap-2">
               <Bar
                 label="HP"
@@ -131,9 +274,31 @@ export function UI({ snap, onStart, onResume, onRestart, onAbandon }: UIProps) {
             </div>
           </div>
 
-          <div className="absolute bottom-3 left-4 text-[11px] tracking-[0.2em] text-cyan-100/35 font-semibold">
-            {snap.muted ? "SOUND OFF — [M]" : "SOUND ON — [M]"}
+          {/* Bottom Toolbar */}
+          <div className="absolute bottom-3 left-4 flex items-center gap-3 pointer-events-auto">
+            <button
+              onClick={onToggleSound}
+              className="text-[11px] tracking-[0.2em] text-cyan-100/60 hover:text-cyan-100 font-semibold px-2.5 py-1 rounded bg-black/40 border border-cyan-500/30 transition-colors"
+            >
+              {snap.muted ? "🔇 SOUND OFF" : "🔊 SOUND ON"}
+            </button>
+
+            <button
+              onClick={() => setShowTouch((prev) => !prev)}
+              className={`text-[11px] tracking-[0.2em] font-semibold px-2.5 py-1 rounded border transition-colors ${
+                showTouch
+                  ? "bg-cyan-500/20 text-cyan-200 border-cyan-400"
+                  : "bg-black/40 text-cyan-100/50 border-cyan-500/20"
+              }`}
+            >
+              TOUCH {showTouch ? "ON" : "OFF"}
+            </button>
           </div>
+
+          {/* Active Touch Controls */}
+          {showTouch && snap.state === "playing" && (
+            <TouchControls snap={snap} onMove={onMove} onAction={onAction} />
+          )}
 
           {snap.prompt && (
             <div className="absolute bottom-16 left-1/2 -translate-x-1/2 prompt-pop">

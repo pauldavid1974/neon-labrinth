@@ -258,7 +258,13 @@ function tryMove(ctx: GameCtx, dx: number, dy: number): boolean {
     const m = mark.m.get(occ);
     if (m && m.tag === "enemy") {
       // bump-attack
-      const dmg = Math.max(2, Math.round(s.weapon.melee * (0.85 + ctx.rng() * 0.4)));
+      let dmg = Math.max(2, Math.round(s.weapon.melee * (0.85 + ctx.rng() * 0.4)));
+      if (s.relics.includes("OVERCHARGE MATRIX")) {
+        dmg = Math.round(dmg * 1.3);
+        ctx.fx.ring(tx, ty, 0xfacc15, 1.8);
+        ctx.fx.burst(tx + 0.5, ty + 0.5, 0xfacc15, 12, 3.5, 0.4, 0.12);
+        ctx.sfx.play("shock");
+      }
       ctx.damageEnemy(occ, dmg, dx, dy);
       s.en = clamp(s.en + 4, 0, s.maxEn); // melee vents energy back into the capacitor
       return true;
@@ -357,6 +363,9 @@ function applyLoot(ctx: GameCtx, l: LootComp): void {
       s.en = s.maxEn;
       s.maxAbilityCd = Math.max(4.0, s.maxAbilityCd - 1.5);
       ctx.fx.text(px, py - 0.6, `${l.name}  MAX EN +30 / CD -1.5s`, "#ff9df0", 13);
+    } else if (l.tier === 5) {
+      s.weapon = { ...s.weapon, bolt: s.weapon.bolt + 8, melee: s.weapon.melee + 8 };
+      ctx.fx.text(px, py - 0.6, `${l.name}  CRIT & SHOCK MATRIX ACTIVE`, "#facc15", 14);
     } else {
       s.weapon = { ...s.weapon, bolt: s.weapon.bolt + 6, melee: s.weapon.melee + 6 };
       ctx.fx.text(px, py - 0.6, `${l.name}  POWER +6`, "#ff9df0", 13);
@@ -373,15 +382,17 @@ export const WEAPON_TABLE: WeaponStats[] = [
   { name: "TESLA LANCE", bolt: 18, melee: 12, cost: 14, color: 0x4df3ff, behavior: "chain", chainCount: 2 },
   { name: "NOVA MORTAR", bolt: 28, melee: 18, cost: 18, color: 0xff2bd6, behavior: "aoe", aoeRadius: 1.5 },
   { name: "VOID SINGULARITY", bolt: 40, melee: 24, cost: 20, color: 0xb967ff, behavior: "rail" },
+  { name: "CHRONO TACHYON", bolt: 48, melee: 28, cost: 22, color: 0x38bdf8, behavior: "chrono" },
 ];
 
-export const WEAPON_PREFIX = ["IONIZED", "HEXED", "CHROME", "VIRAL", "PHANTOM", "OVERCLOCKED"] as const;
+export const WEAPON_PREFIX = ["IONIZED", "HEXED", "CHROME", "VIRAL", "PHANTOM", "OVERCLOCKED", "TACHYONIC"] as const;
 export const RELIC_NAMES = [
   "AEGIS PLATING",
   "FLUX OVERCLOCK",
   "VAMPIRIC CIRCUIT",
   "TITAN CORE",
   "STATIC DISCHARGE",
+  "OVERCHARGE MATRIX",
   "CRITICAL MATRIX",
 ] as const;
 
@@ -490,9 +501,33 @@ function tryShoot(ctx: GameCtx): boolean {
   let dx = ctx.input.aimX - ox;
   let dy = ctx.input.aimY - oy;
   const dl = Math.sqrt(dx * dx + dy * dy);
-  if (dl < 0.001) {
-    dx = s.lastDx || 1;
-    dy = s.lastDy || 0;
+  if (dl < 0.45) {
+    // Smart auto-aim: target closest visible enemy if neutral or touch tap
+    const { pos, mark, hp } = st();
+    let closestDist = Infinity;
+    let bestDx = s.lastDx || 1;
+    let bestDy = s.lastDy || 0;
+    for (let i = 0; i < ctx.world.count; i++) {
+      const e = ctx.world.ids[i];
+      const m = mark.m.get(e);
+      if (!m || m.tag !== "enemy") continue;
+      const h = hp.m.get(e);
+      if (!h || h.hp <= 0) continue;
+      const p = pos.m.get(e);
+      if (!p) continue;
+      if (ctx.map.visible[ctx.map.idx(p.x, p.y)] !== 1) continue;
+      const edx = p.x + 0.5 - ox;
+      const edy = p.y + 0.5 - oy;
+      const distSq = edx * edx + edy * edy;
+      if (distSq < closestDist) {
+        closestDist = distSq;
+        bestDx = edx;
+        bestDy = edy;
+      }
+    }
+    const bestLen = Math.sqrt(bestDx * bestDx + bestDy * bestDy) || 1;
+    dx = bestDx / bestLen;
+    dy = bestDy / bestLen;
   } else {
     dx /= dl;
     dy /= dl;
@@ -500,6 +535,33 @@ function tryShoot(ctx: GameCtx): boolean {
 
   const baseAngle = Math.atan2(dy, dx);
   const behavior = s.weapon.behavior ?? "beam";
+  let shotDmg = s.weapon.bolt;
+
+  // Check Overcharge Matrix crit
+  if (s.relics.includes("OVERCHARGE MATRIX") && ctx.rng() < 0.28) {
+    shotDmg = Math.round(shotDmg * 2.2);
+    ctx.sfx.play("crit");
+    ctx.fx.text(px, py - 0.7, "OVERCHARGE CRIT", "#facc15", 14);
+    ctx.fx.flash(0xfacc15, 0.2);
+  }
+
+  if (behavior === "chrono") {
+    ctx.sfx.play("chrono");
+    ctx.fx.shake(5.2);
+    ctx.fx.flash(0x38bdf8, 0.28);
+    const res = castWeaponRay(ctx, ox, oy, dx, dy, 24, shotDmg, 0x38bdf8, true);
+    const { ai, pos } = st();
+    for (const e of res.hitEnemies) {
+      const comp = ai.m.get(e);
+      if (comp) comp.cd = Math.max(comp.cd, 2);
+      const ep = pos.m.get(e);
+      if (ep) {
+        ctx.fx.text(ep.x, ep.y - 0.7, "TIME-LOCKED", "#38bdf8", 12);
+        ctx.fx.ring(ep.x, ep.y, 0x38bdf8, 1.2);
+      }
+    }
+    return true;
+  }
 
   if (behavior === "scatter") {
     ctx.sfx.play("scatter");
@@ -507,7 +569,7 @@ function tryShoot(ctx: GameCtx): boolean {
     const spread = s.weapon.spread ?? 0.18;
     for (const offset of [-spread, 0, spread]) {
       const a = baseAngle + offset;
-      castWeaponRay(ctx, ox, oy, Math.cos(a), Math.sin(a), 14, Math.round(s.weapon.bolt * 0.85), s.weapon.color, false);
+      castWeaponRay(ctx, ox, oy, Math.cos(a), Math.sin(a), 14, Math.round(shotDmg * 0.85), s.weapon.color, false);
     }
     return true;
   }
@@ -515,15 +577,15 @@ function tryShoot(ctx: GameCtx): boolean {
   if (behavior === "aoe") {
     ctx.sfx.play("shoot");
     ctx.fx.shake(4);
-    const res = castWeaponRay(ctx, ox, oy, dx, dy, 16, Math.round(s.weapon.bolt * 0.6), s.weapon.color, false);
-    ctx.explodeAt(Math.floor(res.ex), Math.floor(res.ey), s.weapon.aoeRadius ?? 1.5, s.weapon.bolt, s.weapon.color);
+    const res = castWeaponRay(ctx, ox, oy, dx, dy, 16, Math.round(shotDmg * 0.6), s.weapon.color, false);
+    ctx.explodeAt(Math.floor(res.ex), Math.floor(res.ey), s.weapon.aoeRadius ?? 1.5, shotDmg, s.weapon.color);
     return true;
   }
 
   if (behavior === "chain") {
     ctx.sfx.play("shoot");
     ctx.fx.shake(2.5);
-    const res = castWeaponRay(ctx, ox, oy, dx, dy, 18, s.weapon.bolt, s.weapon.color, false);
+    const res = castWeaponRay(ctx, ox, oy, dx, dy, 18, shotDmg, s.weapon.color, false);
     if (res.hitEnemies.length > 0) {
       const primaryE = res.hitEnemies[0];
       const pp = st().pos.m.get(primaryE);
@@ -544,7 +606,7 @@ function tryShoot(ctx: GameCtx): boolean {
           const distSq = cdx * cdx + cdy * cdy;
           if (distSq > 20) continue;
           ctx.fx.beam(pp.x, pp.y, cp.x, cp.y, 0x4df3ff, 2.5);
-          ctx.damageEnemy(ce, Math.round(s.weapon.bolt * 0.65), cdx, cdy);
+          ctx.damageEnemy(ce, Math.round(shotDmg * 0.65), cdx, cdy);
           ctx.fx.burst(cp.x + 0.5, cp.y + 0.5, 0x4df3ff, 8, 2.5, 0.3, 0.1);
           chains++;
         }
@@ -558,14 +620,14 @@ function tryShoot(ctx: GameCtx): boolean {
     ctx.sfx.play("shoot");
     ctx.fx.shake(5);
     ctx.fx.flash(s.weapon.color, 0.22);
-    castWeaponRay(ctx, ox, oy, dx, dy, 22, s.weapon.bolt, s.weapon.color, true);
+    castWeaponRay(ctx, ox, oy, dx, dy, 22, shotDmg, s.weapon.color, true);
     return true;
   }
 
   // Standard beam
   ctx.sfx.play("shoot");
   ctx.fx.shake(2.2);
-  castWeaponRay(ctx, ox, oy, dx, dy, 20, s.weapon.bolt, s.weapon.color, s.pierce);
+  castWeaponRay(ctx, ox, oy, dx, dy, 20, shotDmg, s.weapon.color, s.pierce);
   return true;
 }
 

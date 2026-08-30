@@ -242,6 +242,28 @@ export class Game implements GameCtx {
     this.pushHud();
   }
 
+  triggerMove(dx: number, dy: number): void {
+    if (this.state !== "playing") return;
+    queueMoveIntent(this, dx, dy);
+    if (runPlayerIntents(this)) {
+      enemyTurnSystem(this);
+      this.pushHud();
+    }
+  }
+
+  triggerAction(action: "shoot" | "dash" | "ability" | "wait" | "descend"): void {
+    if (this.state !== "playing") return;
+    if (action === "shoot") this.input.wantShoot = true;
+    else if (action === "dash") this.input.wantDash = true;
+    else if (action === "ability") this.input.wantAbility = true;
+    else if (action === "wait") this.input.wantWait = true;
+    else if (action === "descend") this.input.wantDescend = true;
+    if (runPlayerIntents(this)) {
+      enemyTurnSystem(this);
+      this.pushHud();
+    }
+  }
+
   private clearInputQueue(): void {
     this.input.moveCount = 0;
     this.input.wantDash = false;
@@ -335,6 +357,7 @@ export class Game implements GameCtx {
     const rays = recomputeFov(this, this.fovPoly);
     this.renderer.onFovChanged(this.map, this.fovPoly, rays);
     this.stats.onStairs = false;
+    this.sfxImpl.updateDroneSector(n);
   }
 
   spawnEnemy(kind: EnemyKind, x: number, y: number): void {

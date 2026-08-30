@@ -164,6 +164,34 @@ export class SynthSfx implements ISfx {
         this.tone("triangle", 659, 1318, 0.4, 0.08, 0.08);
         this.tone("sine", 784, 1568, 0.5, 0.06, 0.16);
         break;
+      case "chrono":
+        this.tone("sine", 1480, 240, 0.24, 0.14);
+        this.tone("square", 880, 110, 0.18, 0.09, 0.02);
+        this.noise(0.14, 0.09, 4400, 2.8);
+        break;
+      case "crit":
+        this.tone("sawtooth", 380, 920, 0.16, 0.13);
+        this.tone("sine", 760, 1520, 0.18, 0.11, 0.02);
+        this.noise(0.1, 0.08, 3600, 2.2);
+        break;
+    }
+  }
+
+  updateDroneSector(floor: number): void {
+    if (!this.ctx || !this.master || this.droneNodes.length === 0) return;
+    try {
+      const baseFreq = floor <= 3 ? 55 : floor <= 6 ? 48.99 : floor <= 9 ? 65.41 : 43.65;
+      let oscIndex = 0;
+      for (const node of this.droneNodes) {
+        if (node instanceof OscillatorNode && node.type === "sawtooth") {
+          const detune = oscIndex === 0 ? 0 : oscIndex === 1 ? 8 : -6;
+          node.frequency.setTargetAtTime(baseFreq * (oscIndex === 2 ? 2 : 1), this.ctx.currentTime, 0.8);
+          node.detune.setTargetAtTime(detune, this.ctx.currentTime, 0.5);
+          oscIndex++;
+        }
+      }
+    } catch {
+      /* ignore */
     }
   }
 

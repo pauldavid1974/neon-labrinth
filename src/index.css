@@ -241,3 +241,45 @@ body,
   0% { box-shadow: inset 0 0 90px rgba(255, 40, 70, 0.55); }
   100% { box-shadow: inset 0 0 0 rgba(255, 40, 70, 0); }
 }
+
+/* ---------- touch controls ---------- */
+.touch-btn {
+  font-family: var(--font-display);
+  background: rgba(10, 14, 29, 0.76);
+  border: 1.5px solid rgba(0, 240, 255, 0.45);
+  color: #aef6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  touch-action: manipulation;
+  transition: all 0.06s ease;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15), inset 0 0 8px rgba(0, 240, 255, 0.08);
+  cursor: pointer;
+}
+.touch-btn:active {
+  transform: scale(0.92);
+  background: rgba(0, 240, 255, 0.3);
+  border-color: #00f0ff;
+  box-shadow: 0 0 22px rgba(0, 240, 255, 0.65), inset 0 0 14px rgba(0, 240, 255, 0.35);
+}
+.touch-btn.magenta {
+  border-color: rgba(255, 43, 214, 0.5);
+  color: #ff9df0;
+  box-shadow: 0 0 12px rgba(255, 43, 214, 0.15);
+}
+.touch-btn.magenta:active {
+  background: rgba(255, 43, 214, 0.32);
+  border-color: #ff2bd6;
+  box-shadow: 0 0 22px rgba(255, 43, 214, 0.65);
+}
+.touch-btn.amber {
+  border-color: rgba(255, 179, 71, 0.5);
+  color: #ffe14d;
+  box-shadow: 0 0 12px rgba(255, 179, 71, 0.15);
+}
+.touch-btn.amber:active {
+  background: rgba(255, 179, 71, 0.32);
+  border-color: #ffb347;
+  box-shadow: 0 0 22px rgba(255, 179, 71, 0.65);
+}
