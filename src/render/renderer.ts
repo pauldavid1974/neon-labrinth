@@ -158,9 +158,13 @@ export class Renderer implements IFx {
     const w = this.worldC;
     w.addChild(this.backplate);
     w.addChild(this.tilesDim);
-    w.addChild(this.tilesLit);
-    w.addChild(this.props);
-    w.addChild(this.stairsGfx);
+
+    const litC = new Container();
+    litC.addChild(this.tilesLit);
+    litC.addChild(this.props);
+    litC.addChild(this.stairsGfx);
+    w.addChild(litC);
+
     w.addChild(this.entityLayer);
     w.addChild(this.lightLayer);
     w.addChild(this.beamLayer);
@@ -170,7 +174,7 @@ export class Renderer implements IFx {
     w.addChild(this.aimLine);
     w.addChild(this.crosshair);
     w.addChild(this.fovMask);
-    this.tilesLit.mask = this.fovMask;
+    litC.mask = this.fovMask;
     const sc = this.screenC;
     sc.addChild(this.flashGfx);
     const vg = new Sprite(this.tex.vignette);
@@ -606,17 +610,31 @@ export class Renderer implements IFx {
     g.clear();
     for (let y = 0; y < map.h; y++) {
       for (let x = 0; x < map.w; x++) {
-        if (!map.seen[map.idx(x, y)]) continue;
-        const t = map.tiles[map.idx(x, y)];
+        const idx = map.idx(x, y);
+        if (!map.seen[idx]) continue;
+        const t = map.tiles[idx];
         const px = x * TILE;
         const py = y * TILE;
+        const cx = px + TILE / 2;
+        const cy = py + TILE / 2;
         if (t === TileT.Wall) {
           g.rect(px, py, TILE, TILE).fill(0x04060d);
         } else {
           g.rect(px, py, TILE, TILE).fill(0x0a0e19);
           g.rect(px + TILE - 1, py, 1, TILE).fill({ color: C_CYAN, alpha: 0.02 });
           if (t === TileT.Stairs) {
-            g.rect(px + 5, py + 5, TILE - 10, TILE - 10).stroke({ color: C_CYAN, width: 1.5, alpha: 0.2 });
+            g.rect(px + 5, py + 5, TILE - 10, TILE - 10).stroke({ color: C_CYAN, width: 1.5, alpha: 0.25 });
+          } else if (t === TileT.Crate) {
+            g.rect(px + 6, py + 6, TILE - 12, TILE - 12).stroke({ color: 0xf59e0b, width: 1, alpha: 0.2 });
+          } else if (t === TileT.Barrel) {
+            g.rect(px + 6, py + 6, TILE - 12, TILE - 12).stroke({ color: 0xff3344, width: 1, alpha: 0.2 });
+            g.circle(cx, cy, 3).stroke({ color: 0xff3344, width: 1, alpha: 0.18 });
+          } else if (t === TileT.TeslaNode) {
+            g.rect(px + 6, py + 6, TILE - 12, TILE - 12).stroke({ color: 0x00f0ff, width: 1, alpha: 0.2 });
+          } else if (t === TileT.Shrine) {
+            g.rect(px + 6, py + 6, TILE - 12, TILE - 12).stroke({ color: 0xfbbf24, width: 1, alpha: 0.22 });
+          } else if (t === TileT.Acid) {
+            g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0x22c55e, width: 1, alpha: 0.18 });
           }
         }
       }
