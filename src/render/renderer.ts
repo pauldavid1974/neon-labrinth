@@ -355,43 +355,90 @@ export class Renderer implements IFx {
         const t = map.tiles[map.idx(x, y)];
         const px = x * TILE;
         const py = y * TILE;
+        const cx = px + TILE / 2;
+        const cy = py + TILE / 2;
+
         if (t === TileT.Wall) {
-          g.rect(px, py, TILE, TILE).fill(0x070a16);
+          // Armored high-tech bulkhead wall
+          g.rect(px, py, TILE, TILE).fill(0x060914);
+          g.rect(px + 2, py + 2, TILE - 4, TILE - 4).fill(0x090e1e);
+          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0x141f38, width: 1, alpha: 0.6 });
+
           const rim = hash2(x, y, seed + 7) < 0.5 ? C_CYAN : C_MAGENTA;
           // neon rim on faces adjacent to floor
           if (y + 1 < map.h && map.tiles[map.idx(x, y + 1)] !== TileT.Wall) {
-            g.rect(px, py + TILE - 3, TILE, 3).fill({ color: rim, alpha: 0.5 });
-            g.rect(px, py + TILE - 7, TILE, 4).fill({ color: rim, alpha: 0.1 });
+            g.rect(px, py + TILE - 3, TILE, 3).fill({ color: rim, alpha: 0.85 });
+            g.rect(px, py + TILE - 6, TILE, 3).fill({ color: rim, alpha: 0.2 });
           }
           if (x + 1 < map.w && map.tiles[map.idx(x + 1, y)] !== TileT.Wall) {
-            g.rect(px + TILE - 3, py, 3, TILE).fill({ color: rim, alpha: 0.3 });
+            g.rect(px + TILE - 3, py, 3, TILE).fill({ color: rim, alpha: 0.5 });
           }
           if (x - 1 >= 0 && map.tiles[map.idx(x - 1, y)] !== TileT.Wall) {
-            g.rect(px, py, 3, TILE).fill({ color: rim, alpha: 0.3 });
+            g.rect(px, py, 3, TILE).fill({ color: rim, alpha: 0.5 });
           }
           if (y - 1 >= 0 && map.tiles[map.idx(x, y - 1)] !== TileT.Wall) {
-            g.rect(px, py, TILE, 3).fill({ color: rim, alpha: 0.3 });
+            g.rect(px, py, TILE, 3).fill({ color: rim, alpha: 0.5 });
           }
         } else {
+          // Cyberpunk floor tiles
           g.rect(px, py, TILE, TILE).fill(this.tileBaseColor(x, y, seed));
-          // faint circuit grid
-          g.rect(px + TILE - 1, py, 1, TILE).fill({ color: C_CYAN, alpha: 0.045 });
-          g.rect(px, py + TILE - 1, TILE, 1).fill({ color: C_CYAN, alpha: 0.045 });
+          // Grid panel seams
+          g.rect(px + TILE - 1, py, 1, TILE).fill({ color: C_CYAN, alpha: 0.06 });
+          g.rect(px, py + TILE - 1, TILE, 1).fill({ color: C_CYAN, alpha: 0.06 });
+
           const h = hash2(x, y, seed + 31);
-          if (h < 0.06) {
-            g.circle(px + TILE / 2, py + TILE / 2, 2.4).fill({ color: C_CYAN, alpha: 0.22 });
-          } else if (h > 0.965) {
-            g.rect(px + 8, py + 8, TILE - 16, TILE - 16).stroke({ color: C_MAGENTA, width: 1, alpha: 0.12 });
+          if (h < 0.08) {
+            // Floor vent grate with underglow
+            g.rect(px + 5, py + 7, TILE - 10, TILE - 14).fill(0x04060e).stroke({ color: C_CYAN, width: 1, alpha: 0.25 });
+            for (let i = 9; i < TILE - 9; i += 3) {
+              g.moveTo(px + 7, py + i).lineTo(px + TILE - 7, py + i).stroke({ color: C_CYAN, width: 1, alpha: 0.2 });
+            }
+          } else if (h < 0.16) {
+            // Circuit trace nexus
+            g.circle(cx, cy, 2.6).fill({ color: C_CYAN, alpha: 0.35 });
+            g.moveTo(cx, cy).lineTo(cx + 8, cy).stroke({ color: C_CYAN, width: 1, alpha: 0.18 });
+            g.moveTo(cx, cy).lineTo(cx, cy + 8).stroke({ color: C_CYAN, width: 1, alpha: 0.18 });
+          } else if (h > 0.94) {
+            // Neon floor decal bracket
+            g.rect(px + 7, py + 7, TILE - 14, TILE - 14).stroke({ color: C_MAGENTA, width: 1, alpha: 0.18 });
           }
+
           if (t === TileT.Door) {
-            g.rect(px + 2, py + TILE / 2 - 2, TILE - 4, 4).fill({ color: 0xffb347, alpha: 0.4 });
+            // Pressurized security airlock door
+            g.rect(px + 2, py + TILE / 2 - 3.5, TILE - 4, 7).fill(0x2a1705);
+            g.rect(px + 2, py + TILE / 2 - 3.5, TILE - 4, 7).stroke({ color: 0xffb347, width: 1.5, alpha: 0.9 });
+            g.rect(cx - 3, cy - 1.5, 6, 3).fill({ color: 0xffe066, alpha: 1 });
           } else if (t === TileT.Stairs) {
-            g.rect(px + 2, py + 2, TILE - 4, TILE - 4).fill({ color: 0x0a1a26, alpha: 1 });
-            g.rect(px + 5, py + 5, TILE - 10, TILE - 10).stroke({ color: C_CYAN, width: 2, alpha: 0.55 });
+            // Descent stairwell
+            g.rect(px + 2, py + 2, TILE - 4, TILE - 4).fill(0x06141f);
+            g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: C_CYAN, width: 2, alpha: 0.8 });
+            g.rect(px + 8, py + 8, TILE - 16, TILE - 16).stroke({ color: C_MAGENTA, width: 1.5, alpha: 0.6 });
           } else if (t === TileT.Pillar) {
-            g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x0b101f);
-            g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: C_CYAN, width: 1.5, alpha: 0.35 });
-            g.circle(px + TILE / 2, py + TILE / 2, 3.4).fill({ color: C_MAGENTA, alpha: 0.5 });
+            // Heavy power conduit pillar
+            g.poly([
+              px + 6, py + 9,
+              px + 9, py + 6,
+              px + TILE - 9, py + 6,
+              px + TILE - 6, py + 9,
+              px + TILE - 6, py + TILE - 9,
+              px + TILE - 9, py + TILE - 6,
+              px + 9, py + TILE - 6,
+              px + 6, py + TILE - 9
+            ]).fill(0x080e1e);
+
+            g.poly([
+              px + 6, py + 9,
+              px + 9, py + 6,
+              px + TILE - 9, py + 6,
+              px + TILE - 6, py + 9,
+              px + TILE - 6, py + TILE - 9,
+              px + TILE - 9, py + TILE - 6,
+              px + 9, py + TILE - 6,
+              px + 6, py + TILE - 9
+            ]).stroke({ color: C_CYAN, width: 2, alpha: 0.8 });
+
+            g.circle(cx, cy, 4).fill({ color: C_MAGENTA, alpha: 0.8 });
+            g.circle(cx, cy, 1.8).fill(0xffffff);
           }
         }
       }
@@ -415,43 +462,140 @@ export class Renderer implements IFx {
         }
         const px = x * TILE;
         const py = y * TILE;
+        const cx = px + TILE / 2;
+        const cy = py + TILE / 2;
         g.rect(px, py, TILE, TILE).fill(this.tileBaseColor(x, y, map.floorSeed));
 
         if (t === TileT.Crate) {
-          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x171126);
-          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0xffb347, width: 1.5, alpha: 0.7 });
-          g.beginPath().moveTo(px + 6, py + 6).lineTo(px + TILE - 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
-          g.beginPath().moveTo(px + TILE - 6, py + 6).lineTo(px + 6, py + TILE - 6).stroke({ color: 0xffb347, width: 1, alpha: 0.4 });
+          // Cyberpunk Heavy Cargo Crate with reinforced armor plating & glowing holographic lock
+          g.poly([
+            px + 4, py + 7,
+            px + 7, py + 4,
+            px + TILE - 7, py + 4,
+            px + TILE - 4, py + 7,
+            px + TILE - 4, py + TILE - 7,
+            px + TILE - 7, py + TILE - 4,
+            px + 7, py + TILE - 4,
+            px + 4, py + TILE - 7
+          ]).fill(0x130d22);
+
+          // Outer amber frame
+          g.poly([
+            px + 4, py + 7,
+            px + 7, py + 4,
+            px + TILE - 7, py + 4,
+            px + TILE - 4, py + 7,
+            px + TILE - 4, py + TILE - 7,
+            px + TILE - 7, py + TILE - 4,
+            px + 7, py + TILE - 4,
+            px + 4, py + TILE - 7
+          ]).stroke({ color: 0xf59e0b, width: 1.8, alpha: 0.9 });
+
+          // Reinforced corner brackets
+          g.rect(px + 4, py + 4, 4, 4).fill({ color: 0xf59e0b, alpha: 0.9 });
+          g.rect(px + TILE - 8, py + 4, 4, 4).fill({ color: 0xf59e0b, alpha: 0.9 });
+          g.rect(px + 4, py + TILE - 8, 4, 4).fill({ color: 0xf59e0b, alpha: 0.9 });
+          g.rect(px + TILE - 8, py + TILE - 8, 4, 4).fill({ color: 0xf59e0b, alpha: 0.9 });
+
+          // Diagonal structural trusses
+          g.moveTo(px + 8, py + 8).lineTo(px + TILE - 8, py + TILE - 8).stroke({ color: 0xf59e0b, width: 1.2, alpha: 0.35 });
+          g.moveTo(px + TILE - 8, py + 8).lineTo(px + 8, py + TILE - 8).stroke({ color: 0xf59e0b, width: 1.2, alpha: 0.35 });
+
+          // Central electronic lock mechanism
+          g.rect(cx - 4, cy - 4, 8, 8).fill(0x040814).stroke({ color: 0x00f0ff, width: 1.2, alpha: 0.85 });
+          g.circle(cx, cy, 2).fill({ color: 0x00f0ff, alpha: 1 });
+
         } else if (t === TileT.Barrel) {
-          // Volatile Core Canister
-          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x2a0d14);
-          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0xff3b4e, width: 1.5, alpha: 0.85 });
-          g.circle(px + TILE / 2, py + TILE / 2, 5.5).fill({ color: 0xff4d22, alpha: 0.85 });
-          g.circle(px + TILE / 2, py + TILE / 2, 2.8).fill({ color: 0xffe066, alpha: 0.95 });
-          g.beginPath().moveTo(px + 8, py + 4).lineTo(px + 8, py + TILE - 4).stroke({ color: 0xff8833, width: 1, alpha: 0.5 });
-          g.beginPath().moveTo(px + TILE - 8, py + 4).lineTo(px + TILE - 8, py + TILE - 4).stroke({ color: 0xff8833, width: 1, alpha: 0.5 });
+          // Volatile Cyber-Canister: Octagonal containment vessel with hazard markings & glowing plasma core
+          g.poly([
+            px + 5, py + 8,
+            px + 8, py + 5,
+            px + TILE - 8, py + 5,
+            px + TILE - 5, py + 8,
+            px + TILE - 5, py + TILE - 8,
+            px + TILE - 8, py + TILE - 5,
+            px + 8, py + TILE - 5,
+            px + 5, py + TILE - 8
+          ]).fill(0x20070e);
+
+          // Glowing crimson hazard frame
+          g.poly([
+            px + 5, py + 8,
+            px + 8, py + 5,
+            px + TILE - 8, py + 5,
+            px + TILE - 5, py + 8,
+            px + TILE - 5, py + TILE - 8,
+            px + TILE - 8, py + TILE - 5,
+            px + 8, py + TILE - 5,
+            px + 5, py + TILE - 8
+          ]).stroke({ color: 0xff2244, width: 2, alpha: 1 });
+
+          // Top and bottom hazard warning bars
+          g.rect(px + 9, py + 6, TILE - 18, 2.5).fill({ color: 0xffa500, alpha: 0.95 });
+          g.rect(px + 9, py + TILE - 8.5, TILE - 18, 2.5).fill({ color: 0xffa500, alpha: 0.95 });
+
+          // Side reinforcement struts
+          g.moveTo(px + 6, py + 11).lineTo(px + 6, py + TILE - 11).stroke({ color: 0xff3b4e, width: 1.5, alpha: 0.8 });
+          g.moveTo(px + TILE - 6, py + 11).lineTo(px + TILE - 6, py + TILE - 11).stroke({ color: 0xff3b4e, width: 1.5, alpha: 0.8 });
+
+          // High-energy plasma core chamber
+          g.circle(cx, cy, 6.5).fill(0x380a14).stroke({ color: 0xff4422, width: 1.2, alpha: 0.9 });
+          g.circle(cx, cy, 4.2).fill({ color: 0xff5511, alpha: 0.95 });
+          g.circle(cx, cy, 2.2).fill({ color: 0xfff066, alpha: 1 });
+
         } else if (t === TileT.TeslaNode) {
-          // Tesla Electrical Relay
-          g.rect(px + 5, py + 5, TILE - 10, TILE - 10).fill(0x061824);
-          g.rect(px + 5, py + 5, TILE - 10, TILE - 10).stroke({ color: 0x00f0ff, width: 1.5, alpha: 0.8 });
-          g.circle(px + TILE / 2, py + TILE / 2, 4.8).stroke({ color: 0x4df3ff, width: 1.5, alpha: 0.9 });
-          g.circle(px + TILE / 2, py + TILE / 2, 2.2).fill({ color: 0x00f0ff, alpha: 0.95 });
-          g.beginPath().moveTo(px + TILE / 2, py + 2).lineTo(px + TILE / 2, py + 6).stroke({ color: 0x4df3ff, width: 1.5, alpha: 0.7 });
-          g.beginPath().moveTo(px + TILE / 2, py + TILE - 6).lineTo(px + TILE / 2, py + TILE - 2).stroke({ color: 0x4df3ff, width: 1.5, alpha: 0.7 });
+          // Tesla Electrical Relay: High-voltage capacitor pylon with induction coils & arcs
+          g.poly([
+            px + 6, py + 9,
+            px + 9, py + 6,
+            px + TILE - 9, py + 6,
+            px + TILE - 6, py + 9,
+            px + TILE - 6, py + TILE - 9,
+            px + TILE - 9, py + TILE - 6,
+            px + 9, py + TILE - 6,
+            px + 6, py + TILE - 9
+          ]).fill(0x051a28);
+
+          g.poly([
+            px + 6, py + 9,
+            px + 9, py + 6,
+            px + TILE - 9, py + 6,
+            px + TILE - 6, py + 9,
+            px + TILE - 6, py + TILE - 9,
+            px + TILE - 9, py + TILE - 6,
+            px + 9, py + TILE - 6,
+            px + 6, py + TILE - 9
+          ]).stroke({ color: 0x00f0ff, width: 2, alpha: 0.95 });
+
+          // Induction coil ring
+          g.circle(cx, cy, 7).stroke({ color: 0x38bdf8, width: 1.4, alpha: 0.8 });
+          // Arc core
+          g.circle(cx, cy, 3.8).fill({ color: 0x4df3ff, alpha: 0.95 });
+          g.circle(cx, cy, 1.8).fill(0xffffff);
+
+          // Electrostatic discharge needles
+          g.moveTo(cx, py + 2).lineTo(cx, py + 6).stroke({ color: 0x4df3ff, width: 2, alpha: 0.85 });
+          g.moveTo(cx, py + TILE - 6).lineTo(cx, py + TILE - 2).stroke({ color: 0x4df3ff, width: 2, alpha: 0.85 });
+          g.moveTo(px + 2, cy).lineTo(px + 6, cy).stroke({ color: 0x4df3ff, width: 2, alpha: 0.85 });
+          g.moveTo(px + TILE - 6, cy).lineTo(px + TILE - 2, cy).stroke({ color: 0x4df3ff, width: 2, alpha: 0.85 });
+
         } else if (t === TileT.Acid) {
-          // Acid hazard pool
-          g.rect(px + 2, py + 2, TILE - 4, TILE - 4).fill({ color: 0x062810, alpha: 0.85 });
-          g.rect(px + 2, py + 2, TILE - 4, TILE - 4).stroke({ color: 0x22c55e, width: 1.5, alpha: 0.75 });
-          g.circle(px + 10, py + 12, 2.5).fill({ color: 0x86efac, alpha: 0.9 });
-          g.circle(px + 21, py + 19, 3.2).fill({ color: 0x4ade80, alpha: 0.85 });
+          // Bio-Hazard Acid Pool: Corrosive sludge with toxic bubbles
+          g.rect(px + 2, py + 2, TILE - 4, TILE - 4).fill({ color: 0x041f0b, alpha: 0.9 });
+          g.rect(px + 2, py + 2, TILE - 4, TILE - 4).stroke({ color: 0x22c55e, width: 1.5, alpha: 0.8 });
+          g.circle(px + 9, py + 11, 2.8).fill({ color: 0x86efac, alpha: 0.95 });
+          g.circle(px + 21, py + 18, 3.5).fill({ color: 0x4ade80, alpha: 0.9 });
+          g.circle(px + 22, py + 9, 2.0).fill({ color: 0x86efac, alpha: 0.8 });
+          g.circle(px + 11, py + 22, 2.2).fill({ color: 0x4ade80, alpha: 0.85 });
+
         } else if (t === TileT.Shrine) {
-          // Overclock Shrine
-          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).fill(0x201502);
-          g.rect(px + 4, py + 4, TILE - 8, TILE - 8).stroke({ color: 0xfbbf24, width: 2, alpha: 0.95 });
-          g.circle(px + TILE / 2, py + TILE / 2, 5.5).fill({ color: 0xfbbf24, alpha: 0.9 });
-          g.circle(px + TILE / 2, py + TILE / 2, 2.2).fill(0xffffff);
-          g.beginPath().moveTo(px + TILE / 2, py + 5).lineTo(px + TILE / 2, py + TILE - 5).stroke({ color: 0xfef08a, width: 1.5, alpha: 0.9 });
-          g.beginPath().moveTo(px + 5, py + TILE / 2).lineTo(px + TILE - 5, py + TILE / 2).stroke({ color: 0xfef08a, width: 1.5, alpha: 0.9 });
+          // Overclock Hologram Shrine: Futuristic data altar with glowing gold glyphs
+          g.rect(px + 3, py + 3, TILE - 6, TILE - 6).fill(0x1c1303);
+          g.rect(px + 3, py + 3, TILE - 6, TILE - 6).stroke({ color: 0xfbbf24, width: 2, alpha: 0.95 });
+          g.rect(px + 7, py + 7, TILE - 14, TILE - 14).stroke({ color: 0xfde047, width: 1.2, alpha: 0.6 });
+          // Floating hologram diamond
+          g.poly([cx, cy - 6, cx + 5, cy, cx, cy + 6, cx - 5, cy]).fill({ color: 0xfef08a, alpha: 0.95 });
+          g.poly([cx, cy - 3, cx + 2.5, cy, cx, cy + 3, cx - 2.5, cy]).fill(0xffffff);
         }
       }
     }
@@ -595,82 +739,112 @@ export class Renderer implements IFx {
     v.root.scale.set(1);
 
     if (kind === "sentinel") {
+      // Hovering diamond sniper drone with sensor wings & glowing aperture
       body
-        .poly([0, -12, 9, 0, 0, 12, -9, 0])
-        .fill({ color: 0xffffff, alpha: 0.95 })
-        .poly([0, -12, 9, 0, 0, 12, -9, 0])
-        .stroke({ color: tint, width: 1.5, alpha: 0.9 })
-        .circle(0, 0, 3.4)
-        .fill(tint);
-      v.bobAmp = 3.2;
-    } else if (kind === "goliath") {
-      body
-        .rect(-12, -12, 24, 24)
-        .fill({ color: 0xffffff, alpha: 0.95 })
-        .rect(-12, -12, 24, 24)
-        .stroke({ color: tint, width: 2, alpha: 1 })
-        .rect(-6, -6, 12, 12)
-        .fill(tint)
-        .rect(-2.5, -12, 5, 24)
-        .fill({ color: 0x04050c, alpha: 0.8 });
-      v.bobAmp = 1.2;
-      v.root.scale.set(1.22);
-    } else if (kind === "phantom") {
-      body
-        .poly([0, -13, 8, -4, 11, 4, 0, 12, -11, 4, -8, -4])
-        .fill({ color: 0xffffff, alpha: 0.92 })
-        .poly([0, -13, 8, -4, 11, 4, 0, 12, -11, 4, -8, -4])
-        .stroke({ color: tint, width: 1.8, alpha: 0.95 })
-        .circle(0, 0, 4)
-        .fill({ color: 0x1a0628, alpha: 0.9 })
-        .circle(0, 0, 1.8)
-        .fill(tint);
-      v.bobAmp = 2.8;
-    } else if (kind === "skitterer") {
-      body
-        .poly([0, -9, 7, 7, -7, 7])
-        .fill({ color: 0xffffff, alpha: 0.95 })
-        .poly([0, -9, 7, 7, -7, 7])
-        .stroke({ color: tint, width: 1.5, alpha: 0.9 })
-        .circle(0, 1, 2.2)
-        .fill(tint);
-      v.bobAmp = 1.6;
-      v.root.scale.set(0.85);
-    } else if (kind === "sentry") {
-      body
-        .poly([0, -11, 9.5, -5.5, 9.5, 5.5, 0, 11, -9.5, 5.5, -9.5, -5.5])
-        .fill({ color: 0xffffff, alpha: 0.95 })
-        .poly([0, -11, 9.5, -5.5, 9.5, 5.5, 0, 11, -9.5, 5.5, -9.5, -5.5])
+        .poly([0, -13, 10, 0, 0, 13, -10, 0])
+        .fill({ color: 0x09121f, alpha: 0.95 })
+        .poly([0, -13, 10, 0, 0, 13, -10, 0])
         .stroke({ color: tint, width: 1.8, alpha: 1 })
-        .circle(0, 0, 4)
-        .stroke({ color: 0x00f0ff, width: 1.5, alpha: 0.85 })
-        .circle(0, 0, 1.8)
-        .fill(tint);
-      v.bobAmp = 2.0;
-    } else if (kind === "boss_warden") {
+        .poly([0, -7, 5.5, 0, 0, 7, -5.5, 0])
+        .fill({ color: tint, alpha: 0.85 })
+        .circle(0, 0, 2.2)
+        .fill(0xffffff)
+        .moveTo(-13, 0).lineTo(-10, 0).stroke({ color: tint, width: 1.5, alpha: 0.9 })
+        .moveTo(10, 0).lineTo(13, 0).stroke({ color: tint, width: 1.5, alpha: 0.9 });
+      v.bobAmp = 3.0;
+    } else if (kind === "goliath") {
+      // Heavy armored juggernaut mech chassis with front blast shield & glowing reactor
       body
-        .rect(-17, -17, 34, 34)
-        .fill({ color: 0x1a050f, alpha: 0.98 })
-        .rect(-17, -17, 34, 34)
-        .stroke({ color: tint, width: 2.5, alpha: 1 })
-        .circle(0, 0, 10)
-        .fill({ color: 0xff0055, alpha: 0.85 })
-        .circle(0, 0, 5)
-        .fill(0xffffff)
-        .rect(-19, -4, 6, 8)
-        .fill(0xffffff)
-        .rect(13, -4, 6, 8)
-        .fill(0xffffff);
+        .poly([
+          -13, -8, -8, -13, 8, -13, 13, -8,
+          13, 8, 8, 13, -8, 13, -13, 8
+        ])
+        .fill({ color: 0x180a0e, alpha: 0.96 })
+        .poly([
+          -13, -8, -8, -13, 8, -13, 13, -8,
+          13, 8, 8, 13, -8, 13, -13, 8
+        ])
+        .stroke({ color: tint, width: 2.2, alpha: 1 })
+        // Armor shoulder plating
+        .rect(-11, -11, 4, 4).fill({ color: tint, alpha: 0.9 })
+        .rect(7, -11, 4, 4).fill({ color: tint, alpha: 0.9 })
+        .rect(-11, 7, 4, 4).fill({ color: tint, alpha: 0.9 })
+        .rect(7, 7, 4, 4).fill({ color: tint, alpha: 0.9 })
+        // Central power reactor
+        .circle(0, 0, 6).fill(0x350d18).stroke({ color: tint, width: 1.5, alpha: 1 })
+        .circle(0, 0, 3.2).fill({ color: 0xff3b4e, alpha: 1 })
+        .circle(0, 0, 1.4).fill(0xffffff);
       v.bobAmp = 1.0;
-      v.root.scale.set(1.5);
-    } else {
+      v.root.scale.set(1.25);
+    } else if (kind === "phantom") {
+      // Ethereal phase-shifting cyber-spectre
       body
-        .poly([0, -11, 10, 8, 0, 3.5, -10, 8])
-        .fill({ color: 0xffffff, alpha: 0.95 })
-        .poly([0, -11, 10, 8, 0, 3.5, -10, 8])
-        .stroke({ color: tint, width: 1.5, alpha: 0.8 })
-        .circle(0, -1, 3)
-        .fill(0x04050c);
+        .poly([0, -14, 9, -5, 12, 4, 0, 13, -12, 4, -9, -5])
+        .fill({ color: 0x160826, alpha: 0.92 })
+        .poly([0, -14, 9, -5, 12, 4, 0, 13, -12, 4, -9, -5])
+        .stroke({ color: tint, width: 1.8, alpha: 1 })
+        .poly([0, -8, 6, -2, 7, 3, 0, 8, -7, 3, -6, -2])
+        .fill({ color: tint, alpha: 0.45 })
+        .circle(0, 0, 2.4)
+        .fill(0xffffff);
+      v.bobAmp = 3.0;
+    } else if (kind === "skitterer") {
+      // Fast quad-drone swarmer
+      body
+        .poly([0, -10, 8, 7, -8, 7])
+        .fill({ color: 0x0f1806, alpha: 0.95 })
+        .poly([0, -10, 8, 7, -8, 7])
+        .stroke({ color: tint, width: 1.6, alpha: 1 })
+        .circle(0, 1, 2.5)
+        .fill({ color: tint, alpha: 0.9 })
+        .circle(0, 1, 1.2)
+        .fill(0xffffff);
+      v.bobAmp = 1.6;
+      v.root.scale.set(0.9);
+    } else if (kind === "sentry") {
+      // Shield-generator defensive pylon
+      body
+        .poly([0, -12, 10, -6, 10, 6, 0, 12, -10, 6, -10, -6])
+        .fill({ color: 0x051624, alpha: 0.95 })
+        .poly([0, -12, 10, -6, 10, 6, 0, 12, -10, 6, -10, -6])
+        .stroke({ color: tint, width: 2, alpha: 1 })
+        .circle(0, 0, 4.5)
+        .stroke({ color: 0x00f0ff, width: 1.5, alpha: 0.9 })
+        .circle(0, 0, 2.2)
+        .fill({ color: 0x00f0ff, alpha: 1 });
+      v.bobAmp = 1.8;
+    } else if (kind === "boss_warden") {
+      // Apex Cyber-Dreadnought Boss
+      body
+        .rect(-18, -18, 36, 36)
+        .fill({ color: 0x1f040d, alpha: 0.98 })
+        .rect(-18, -18, 36, 36)
+        .stroke({ color: tint, width: 2.6, alpha: 1 })
+        // Dual heavy rail cannons
+        .rect(-21, -5, 6, 10).fill(0xffffff).stroke({ color: tint, width: 1.2 })
+        .rect(15, -5, 6, 10).fill(0xffffff).stroke({ color: tint, width: 1.2 })
+        // Armored corner plates
+        .rect(-16, -16, 6, 6).fill({ color: tint, alpha: 0.8 })
+        .rect(10, -16, 6, 6).fill({ color: tint, alpha: 0.8 })
+        .rect(-16, 10, 6, 6).fill({ color: tint, alpha: 0.8 })
+        .rect(10, 10, 6, 6).fill({ color: tint, alpha: 0.8 })
+        // Core eye
+        .circle(0, 0, 11).fill({ color: 0x3d0615, alpha: 1 }).stroke({ color: 0xff0055, width: 1.8 })
+        .circle(0, 0, 6.5).fill({ color: 0xff0055, alpha: 0.95 })
+        .circle(0, 0, 3).fill(0xffffff);
+      v.bobAmp = 0.8;
+      v.root.scale.set(1.55);
+    } else {
+      // Default Stalker
+      body
+        .poly([0, -12, 10, 8, 0, 3.5, -10, 8])
+        .fill({ color: 0x180612, alpha: 0.95 })
+        .poly([0, -12, 10, 8, 0, 3.5, -10, 8])
+        .stroke({ color: tint, width: 1.8, alpha: 1 })
+        .poly([0, -6, 5, 4, 0, 1.5, -5, 4])
+        .fill({ color: tint, alpha: 0.8 })
+        .circle(0, -1, 2.2)
+        .fill(0xffffff);
     }
     // refresh glow tint
     const glow = v.root.children[0] as Sprite;
@@ -832,8 +1006,8 @@ export class Renderer implements IFx {
     /* pointer → aim tile */
     const worldPxX = (this.mouseSx - this.worldC.position.x) / this.zoom;
     const worldPxY = (this.mouseSy - this.worldC.position.y) / this.zoom;
-    ctx.input.aimX = worldPxX / TILE - 0.5;
-    ctx.input.aimY = worldPxY / TILE - 0.5;
+    ctx.input.aimX = worldPxX / TILE;
+    ctx.input.aimY = worldPxY / TILE;
     ctx.input.lmbHeld = this.mouseLmb;
 
     /* entities */
@@ -941,10 +1115,37 @@ export class Renderer implements IFx {
       dx /= dl;
       dy /= dl;
 
-      // snap the reticle onto the nearest visible enemy lying on the aim ray,
-      // mirroring the beam's hit test so aim feedback == actual shot result
       let bestT = d;
       let locked = false;
+      let lockedCenterX = 0;
+      let lockedCenterY = 0;
+
+      // 1. Check shootable map props (Barrels, TeslaNodes, Crates) along aim ray or mouse hover
+      const maxCheckDist = Math.min(d, dl + 1.2);
+      for (let t = 0.4; t <= maxCheckDist; t += 0.35) {
+        const gx = Math.floor(px + dx * t);
+        const gy = Math.floor(py + dy * t);
+        if (!map.inBounds(gx, gy)) break;
+        if (map.visible[map.idx(gx, gy)] !== 1) continue;
+        const tile = map.tiles[map.idx(gx, gy)];
+        if (tile === TileT.Barrel || tile === TileT.TeslaNode || tile === TileT.Crate) {
+          const rx = gx + 0.5 - px;
+          const ry = gy + 0.5 - py;
+          const tProj = rx * dx + ry * dy;
+          if (tProj > 0.2 && tProj < bestT + 0.25) {
+            const perp = Math.abs(rx * dy - ry * dx);
+            if (perp < 0.6) {
+              bestT = tProj;
+              locked = true;
+              lockedCenterX = (gx + 0.5) * TILE;
+              lockedCenterY = (gy + 0.5) * TILE;
+              break;
+            }
+          }
+        }
+      }
+
+      // 2. Check visible enemies along the aim ray
       for (let i = 0; i < ctx.world.count; i++) {
         const e = ctx.world.ids[i];
         const m = markS.m.get(e);
@@ -958,14 +1159,18 @@ export class Renderer implements IFx {
         const ry = ery + 0.5 - py;
         const tProj = rx * dx + ry * dy;
         if (tProj < 0.2 || tProj > d) continue;
-        if (Math.abs(rx * dy - ry * dx) < 0.47 && tProj < bestT) {
+        const perp = Math.abs(rx * dy - ry * dx);
+        if (perp < 0.58 && tProj <= bestT + 0.1) {
           bestT = tProj;
           locked = true;
+          lockedCenterX = (erx + 0.5) * TILE;
+          lockedCenterY = (ery + 0.5) * TILE;
         }
       }
 
-      const lx = (px + dx * d) * TILE;
-      const ly = (py + dy * d) * TILE;
+      const lx = locked ? lockedCenterX : (px + dx * d) * TILE;
+      const ly = locked ? lockedCenterY : (py + dy * d) * TILE;
+
       this.aimLine.clear();
       this.aimLine
         .beginPath()
@@ -974,20 +1179,39 @@ export class Renderer implements IFx {
         .stroke({
           color: locked ? C_MAGENTA : C_CYAN,
           width: 1.5,
-          alpha: locked ? 0.35 : 0.16,
+          alpha: locked ? 0.45 : 0.18,
         });
 
-      const chx = (px + dx * bestT) * TILE;
-      const chy = (py + dy * bestT) * TILE;
+      const chx = locked ? lockedCenterX : Math.min(worldPxX, lx);
+      const chy = locked ? lockedCenterY : Math.min(worldPxY, ly);
+      const actualChx = locked ? lockedCenterX : (dl <= d ? worldPxX : lx);
+      const actualChy = locked ? lockedCenterY : (dl <= d ? worldPxY : ly);
+
       this.crosshair.clear();
       if (locked) {
-        // target-lock reticle: pulsing magenta ring + center dot only
-        const pulse = 10.5 + Math.sin(this.time * 9) * 1.3;
-        this.crosshair.circle(chx, chy, pulse).stroke({ color: C_MAGENTA, width: 1.8, alpha: 0.95 });
-        this.crosshair.circle(chx, chy, 1.9).fill({ color: C_MAGENTA, alpha: 1 });
+        // High-tech target-lock frame
+        const pulse = 13 + Math.sin(this.time * 9.5) * 1.5;
+        const bSize = 14;
+        const bArm = 4.5;
+        // Top-Left
+        this.crosshair.moveTo(chx - bSize, chy - bSize + bArm).lineTo(chx - bSize, chy - bSize).lineTo(chx - bSize + bArm, chy - bSize).stroke({ color: C_MAGENTA, width: 2, alpha: 0.95 });
+        // Top-Right
+        this.crosshair.moveTo(chx + bSize - bArm, chy - bSize).lineTo(chx + bSize, chy - bSize).lineTo(chx + bSize, chy - bSize + bArm).stroke({ color: C_MAGENTA, width: 2, alpha: 0.95 });
+        // Bottom-Left
+        this.crosshair.moveTo(chx - bSize, chy + bSize - bArm).lineTo(chx - bSize, chy + bSize).lineTo(chx - bSize + bArm, chy + bSize).stroke({ color: C_MAGENTA, width: 2, alpha: 0.95 });
+        // Bottom-Right
+        this.crosshair.moveTo(chx + bSize - bArm, chy + bSize).lineTo(chx + bSize, chy + bSize).lineTo(chx + bSize, chy + bSize - bArm).stroke({ color: C_MAGENTA, width: 2, alpha: 0.95 });
+        // Inner pulsing lock ring & center diamond
+        this.crosshair.circle(chx, chy, pulse).stroke({ color: C_MAGENTA, width: 1.4, alpha: 0.8 });
+        this.crosshair.poly([chx, chy - 3.5, chx + 3.5, chy, chx, chy + 3.5, chx - 3.5, chy]).fill({ color: 0xffffff, alpha: 0.95 });
       } else {
-        this.crosshair.circle(chx, chy, 7).stroke({ color: C_CYAN, width: 1.6, alpha: 0.9 });
-        this.crosshair.circle(chx, chy, 1.8).fill({ color: C_MAGENTA, alpha: 0.95 });
+        // Precise tactical reticle
+        this.crosshair.circle(actualChx, actualChy, 7.5).stroke({ color: C_CYAN, width: 1.5, alpha: 0.9 });
+        this.crosshair.circle(actualChx, actualChy, 1.8).fill({ color: C_MAGENTA, alpha: 0.95 });
+        this.crosshair.moveTo(actualChx - 11, actualChy).lineTo(actualChx - 6, actualChy).stroke({ color: C_CYAN, width: 1.2, alpha: 0.75 });
+        this.crosshair.moveTo(actualChx + 6, actualChy).lineTo(actualChx + 11, actualChy).stroke({ color: C_CYAN, width: 1.2, alpha: 0.75 });
+        this.crosshair.moveTo(actualChx, actualChy - 11).lineTo(actualChx, actualChy - 6).stroke({ color: C_CYAN, width: 1.2, alpha: 0.75 });
+        this.crosshair.moveTo(actualChx, actualChy + 6).lineTo(actualChx, actualChy + 11).stroke({ color: C_CYAN, width: 1.2, alpha: 0.75 });
       }
     }
 
