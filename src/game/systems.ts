@@ -547,8 +547,10 @@ function tryShoot(ctx: GameCtx): boolean {
 
   if (behavior === "chrono") {
     ctx.sfx.play("chrono");
-    ctx.fx.shake(5.2);
+    ctx.fx.shake(5.2, dx, dy);
     ctx.fx.flash(0x38bdf8, 0.28);
+    ctx.fx.chroma("chrono");
+    ctx.fx.shockwave(px, py, 0x38bdf8, 2.4);
     const res = castWeaponRay(ctx, ox, oy, dx, dy, 24, shotDmg, 0x38bdf8, true);
     const { ai, pos } = st();
     for (const e of res.hitEnemies) {
@@ -565,8 +567,9 @@ function tryShoot(ctx: GameCtx): boolean {
 
   if (behavior === "scatter") {
     ctx.sfx.play("scatter");
-    ctx.fx.shake(3.5);
+    ctx.fx.shake(3.5, dx, dy);
     const spread = s.weapon.spread ?? 0.18;
+    ctx.fx.spray(ox, oy, baseAngle, spread * 2.6, s.weapon.color, 16, 5.2, 0.2, 0.11);
     for (const offset of [-spread, 0, spread]) {
       const a = baseAngle + offset;
       castWeaponRay(ctx, ox, oy, Math.cos(a), Math.sin(a), 14, Math.round(shotDmg * 0.85), s.weapon.color, false);
@@ -576,15 +579,18 @@ function tryShoot(ctx: GameCtx): boolean {
 
   if (behavior === "aoe") {
     ctx.sfx.play("shoot");
-    ctx.fx.shake(4);
+    ctx.fx.shake(4, dx, dy);
     const res = castWeaponRay(ctx, ox, oy, dx, dy, 16, Math.round(shotDmg * 0.6), s.weapon.color, false);
-    ctx.explodeAt(Math.floor(res.ex), Math.floor(res.ey), s.weapon.aoeRadius ?? 1.5, shotDmg, s.weapon.color);
+    const nx = Math.floor(res.ex);
+    const ny = Math.floor(res.ey);
+    ctx.fx.shockwave(nx, ny, s.weapon.color, (s.weapon.aoeRadius ?? 1.5) * 1.6);
+    ctx.explodeAt(nx, ny, s.weapon.aoeRadius ?? 1.5, shotDmg, s.weapon.color);
     return true;
   }
 
   if (behavior === "chain") {
     ctx.sfx.play("shoot");
-    ctx.fx.shake(2.5);
+    ctx.fx.shake(2.5, dx, dy);
     const res = castWeaponRay(ctx, ox, oy, dx, dy, 18, shotDmg, s.weapon.color, false);
     if (res.hitEnemies.length > 0) {
       const primaryE = res.hitEnemies[0];
@@ -606,8 +612,9 @@ function tryShoot(ctx: GameCtx): boolean {
           const distSq = cdx * cdx + cdy * cdy;
           if (distSq > 20) continue;
           ctx.fx.beam(pp.x, pp.y, cp.x, cp.y, 0x4df3ff, 2.5);
+          ctx.fx.beam(pp.x, pp.y + 0.14, cp.x, cp.y - 0.1, 0xffffff, 0.85);
+          ctx.fx.spray(cp.x + 0.5, cp.y + 0.5, Math.atan2(cdy, cdx), 0.9, 0x4df3ff, 6, 3.2, 0.2, 0.08);
           ctx.damageEnemy(ce, Math.round(shotDmg * 0.65), cdx, cdy);
-          ctx.fx.burst(cp.x + 0.5, cp.y + 0.5, 0x4df3ff, 8, 2.5, 0.3, 0.1);
           chains++;
         }
         if (chains > 0) ctx.sfx.play("shock");
@@ -618,15 +625,17 @@ function tryShoot(ctx: GameCtx): boolean {
 
   if (behavior === "rail") {
     ctx.sfx.play("shoot");
-    ctx.fx.shake(5);
+    ctx.fx.shake(5, dx, dy);
     ctx.fx.flash(s.weapon.color, 0.22);
+    ctx.fx.spray(ox, oy, baseAngle, 0.35, s.weapon.color, 8, 4.8, 0.16, 0.1);
     castWeaponRay(ctx, ox, oy, dx, dy, 22, shotDmg, s.weapon.color, true);
     return true;
   }
 
   // Standard beam
   ctx.sfx.play("shoot");
-  ctx.fx.shake(2.2);
+  ctx.fx.shake(2.2, dx, dy);
+  ctx.fx.spray(ox, oy, baseAngle, 0.4, s.weapon.color, 5, 3.6, 0.16, 0.08);
   castWeaponRay(ctx, ox, oy, dx, dy, 20, shotDmg, s.weapon.color, s.pierce);
   return true;
 }
@@ -644,9 +653,9 @@ function tryUseAbility(ctx: GameCtx): boolean {
   s.en -= 30;
   s.abilityCd = s.maxAbilityCd;
   ctx.sfx.play("emp");
-  ctx.fx.ring(px, py, 0x00f0ff, 6.2);
-  ctx.fx.burst(px + 0.5, py + 0.5, 0x4df3ff, 32, 5.5, 0.6, 0.16);
-  ctx.fx.flash(0x00f0ff, 0.35);
+  ctx.fx.shockwave(px, py, 0x00f0ff, 6.2);
+  ctx.fx.chroma("emp");
+  ctx.fx.flash(0x00f0ff, 0.28);
   ctx.fx.shake(7.5);
   ctx.fx.text(px, py - 0.8, "EMP SHOCKWAVE", "#00f0ff", 14);
 
@@ -704,11 +713,16 @@ function tryDash(ctx: GameCtx): boolean {
     s.dashCd = 0.2;
     return false;
   }
+  const pa = st().anim.m.get(ctx.player);
+  if (pa) pa.punch = 1.22;
   for (let i = 0; i <= steps; i++) {
-ctx.fx.burst(startX + dx * i + 0.5, startY + dy * i + 0.5, 0x00f0ff, 6, 2.2, 0.35, 0.12);
+    const gx = startX + dx * i;
+    const gy = startY + dy * i;
+    ctx.fx.ghost(gx, gy, 0x00f0ff);
+    ctx.fx.burst(gx + 0.5, gy + 0.5, 0x00f0ff, 4, 2.0, 0.28, 0.1);
   }
   ctx.sfx.play("dash");
-  ctx.fx.shake(3.4);
+  ctx.fx.shake(3.4, dx, dy);
   tryPickupAt(ctx, p.x, p.y);
   return true;
 }
