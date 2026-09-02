@@ -372,12 +372,6 @@ export function UI({
               <div className="text-[12px] tracking-[0.3em] text-cyan-100/40 font-semibold">OR PRESS ENTER</div>
             </div>
 
-            <div className="rise-in hud-panel notch px-8 py-5" style={{ animationDelay: "0.3s" }}>
-              <div className="font-display text-[11px] tracking-[0.4em] text-cyan-200/80 mb-3 text-center">
-                CONTROL INTERFACE
-              </div>
-              <ControlsGuide />
-            </div>
 
             <div className="rise-in text-[11px] tracking-[0.25em] text-cyan-100/30 font-semibold" style={{ animationDelay: "0.42s" }}>
               PERMADEATH · TURN-BASED TACTICS · INFINITE SECTORS
