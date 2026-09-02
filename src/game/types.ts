@@ -220,10 +220,15 @@ export interface IFx {
   beam(x0: number, y0: number, x1: number, y1: number, color: number, width: number): void;
   ring(x: number, y: number, color: number, radius: number): void;
   burst(x: number, y: number, color: number, count: number, speed: number, life: number, size: number): void;
-  shards(x: number, y: number, color: number, count: number, power: number): void;
+  shards(x: number, y: number, color: number, count: number, power: number, hang?: boolean): void;
   text(x: number, y: number, str: string, color: string, size?: number): void;
   flash(color: number, alpha: number): void;
-  shake(mag: number): void;
+  /** mag = intensity. Optional dx/dy steers directional trauma (impact vector). */
+  shake(mag: number, dx?: number, dy?: number): void;
+  spray(x: number, y: number, ang: number, spread: number, color: number, count: number, speed: number, life: number, size: number): void;
+  ghost(x: number, y: number, color: number): void;
+  shockwave(x: number, y: number, color: number, radius: number): void;
+  chroma(kind: "emp" | "chrono" | "kill"): void;
 }
 
 /* -------------------------------------------------------------- audio-like */

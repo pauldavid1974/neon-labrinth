@@ -107,22 +107,31 @@ export class ParticlePool {
     }
   }
 
-  /** Triangular debris with gravity — crates, kills. */
-  shards(x: number, y: number, color: number, count: number, power: number): void {
+  /** Triangular debris with gravity — crates, kills. hang=true floats shards longer. */
+  shards(x: number, y: number, color: number, count: number, power: number, hang = false): void {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * TAU;
       const sp = power * (0.4 + Math.random() * 0.9);
       this.spawn(
         x, y,
         Math.cos(a) * sp,
-        Math.sin(a) * sp - power * 0.35,
-        0.5 + Math.random() * 0.5,
-        0.14 + Math.random() * 0.16,
+        Math.sin(a) * sp - power * (hang ? 0.12 : 0.35),
+        hang ? 0.9 + Math.random() * 0.7 : 0.5 + Math.random() * 0.5,
+        hang ? 0.12 + Math.random() * 0.18 : 0.14 + Math.random() * 0.16,
         color,
         2,
-        7.5, 1.8, -0.1, 1,
+        hang ? 1.55 : 7.5,
+        hang ? 2.4 : 1.8,
+        hang ? 0 : -0.1,
+        hang ? 0.95 : 1,
       );
     }
+  }
+
+  /** Lingering scorch bloom at a kill/impact point. */
+  scorch(x: number, y: number, color: number): void {
+    this.spawn(x, y, 0, 0, 0.62, 0.42, color, 0, 0, 0.35, 0.55, 0.42);
+    this.spawn(x, y, 0, 0, 0.4, 0.22, 0x1a0c08, 0, 0, 0.2, 0.18, 0.55);
   }
 
   /** Directional spray (muzzle flash, impacts). */
