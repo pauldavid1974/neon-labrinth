@@ -111,7 +111,7 @@ function TouchControls({
   return (
     <div className="absolute inset-0 pointer-events-none z-30 flex items-end justify-between p-3 sm:p-6 select-none">
       {/* Left: D-PAD */}
-      <div className="pointer-events-auto flex flex-col items-center gap-1.5 pb-2">
+      <div className="pointer-events-auto flex flex-col items-center gap-1.5 pb-2" onPointerDown={(e) => e.stopPropagation()}>
         <button
           className="touch-btn notch-sm w-14 h-14 text-xl font-bold"
           onClick={() => handleMove(0, -1)}
@@ -152,7 +152,7 @@ function TouchControls({
       </div>
 
       {/* Right: ACTION DIAMOND */}
-      <div className="pointer-events-auto flex flex-col items-end gap-2 pb-2">
+      <div className="pointer-events-auto flex flex-col items-end gap-2 pb-2" onPointerDown={(e) => e.stopPropagation()}>
         {/* Stairs button when prompt active */}
         {snap.prompt && (
           <button

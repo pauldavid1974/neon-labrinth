@@ -124,6 +124,9 @@ export class Game implements GameCtx {
 
   private keys = new Set<string>();
   private repeat: RepeatState = { t: 0, heldPrev: false };
+  /** Hit-stop table (seconds @ 60fps): graze 2f, kill 6f, boss 10f, hurt 3f. Max, never sum. */
+  private static readonly HITSTOP = { graze: 2 / 60, kill: 6 / 60, boss: 10 / 60, hurt: 3 / 60 } as const;
+  private static readonly HITSTOP_CAP = 10 / 60;
   private hitstopT = 0;
   private timeScale = 1;
   private targetTimeScale = 1;
@@ -449,6 +452,11 @@ export class Game implements GameCtx {
     this.stores.vis.m.set(e, vis);
   }
 
+  private applyHitstop(kind: keyof typeof Game.HITSTOP): void {
+    const t = Game.HITSTOP[kind];
+    this.hitstopT = Math.min(Game.HITSTOP_CAP, Math.max(this.hitstopT, t));
+  }
+
   /* ---------------------------------------------------------- game loop */
 
   private loop = (t: number): void => {
@@ -627,7 +635,8 @@ export class Game implements GameCtx {
   explodeAt(x: number, y: number, radius: number, dmg: number, color: number): void {
     this.sfx.play("explode");
     this.fx.flash(color, 0.28);
-    this.fx.shake(Math.min(22, 8 + dmg * 0.35));
+    const pp0 = this.stores.pos.get(this.player);
+    this.fx.shake(Math.min(18, 8 + dmg * 0.35), pp0 ? x - pp0.x : 0, pp0 ? y - pp0.y : 0);
     this.fx.ring(x, y, color, radius * 2.2);
     this.fx.burst(x + 0.5, y + 0.5, color, 32, 5.5, 0.65, 0.16);
     this.fx.shards(x + 0.5, y + 0.5, color, 16, 4.8);
@@ -750,26 +759,31 @@ export class Game implements GameCtx {
     if (this.stats.lifesteal > 0) {
       this.stats.hp = clamp(this.stats.hp + this.stats.lifesteal, 0, this.stats.maxHp);
     }
-    if (h.hp <= 0) this.killEnemy(e, ai ? ai.kind : "stalker");
+    if (h.hp <= 0) this.killEnemy(e, ai ? ai.kind : "stalker", kx, ky);
+    else this.applyHitstop("graze");
   }
 
-  private killEnemy(e: number, kind: EnemyKind): void {
+  private killEnemy(e: number, kind: EnemyKind, kx = 0, ky = 0): void {
     const p = this.stores.pos.get(e);
     if (!p) return;
     const ai = this.stores.ai.get(e);
     this.stats.kills++;
     this.stats.score += Math.round(ENEMY_SCORE[kind] * (1 + 0.25 * (this.floor - 1)));
     const tint = ENEMY_TINT[kind];
-    this.fx.burst(p.x + 0.5, p.y + 0.5, tint, 30, 5, 0.55, 0.16);
-    this.fx.shards(p.x + 0.5, p.y + 0.5, tint, 14, 4);
+    this.fx.burst(p.x + 0.5, p.y + 0.5, tint, 18, 3.6, 0.7, 0.12);
+    this.fx.shards(p.x + 0.5, p.y + 0.5, tint, 16, 3.4, true);
     this.fx.ring(p.x, p.y, tint, 1.7);
     this.sfx.play("kill");
-    this.hitstopT = Math.max(this.hitstopT, 0.085);
-    this.fx.shake(11);
+    this.applyHitstop(kind === "boss_warden" ? "boss" : "kill");
+    this.fx.shake(kind === "boss_warden" ? 16 : 11, kx, ky);
+    this.fx.chroma("kill");
 
-    // Volatile death explosion
+    // Volatile elite: hotter blast than a normal kill
     if (ai?.elite === "volatile") {
-      this.explodeAt(p.x, p.y, 1.5, 22 + this.floor * 4, 0xff3b4e);
+      this.fx.shockwave(p.x, p.y, 0xff3b4e, 2.8);
+      this.fx.shards(p.x + 0.5, p.y + 0.5, 0xffaa33, 22, 6.2, true);
+      this.fx.flash(0xff5511, 0.42);
+      this.explodeAt(p.x, p.y, 2.2, 34 + this.floor * 6, 0xff3b4e);
     }
 
     // Boss rewards
@@ -811,12 +825,10 @@ export class Game implements GameCtx {
       this.fx.burst(p.x + 0.5, p.y + 0.5, 0xff4d5e, 14, 3.6, 0.4, 0.13);
     }
     this.fx.flash(0xff2244, 0.26);
-    this.fx.shake(8);
-    this.hitstopT = Math.max(this.hitstopT, 0.05);
+    this.fx.shake(8, p ? p.x - fromX : 0, p ? p.y - fromY : 0);
+    this.applyHitstop("hurt");
     this.sfx.play("hurt");
     this.dmgPulse++;
-    void fromX;
-    void fromY;
     if (st.hp <= 0) {
       st.hp = 0;
       this.startDeath();
@@ -923,12 +935,17 @@ export class Game implements GameCtx {
     ring: (x: number, y: number, color: number, radius: number): void => this.renderer.ring(x, y, color, radius),
     burst: (x: number, y: number, color: number, count: number, speed: number, life: number, size: number): void =>
       this.renderer.burst(x, y, color, count, speed, life, size),
-    shards: (x: number, y: number, color: number, count: number, power: number): void =>
-      this.renderer.shards(x, y, color, count, power),
+    shards: (x: number, y: number, color: number, count: number, power: number, hang?: boolean): void =>
+      this.renderer.shards(x, y, color, count, power, hang),
     text: (x: number, y: number, str: string, color: string, size?: number): void =>
       this.renderer.text(x, y, str, color, size),
     flash: (color: number, alpha: number): void => this.renderer.flash(color, alpha),
-    shake: (mag: number): void => this.renderer.shake(mag),
+    shake: (mag: number, dx?: number, dy?: number): void => this.renderer.shake(mag, dx, dy),
+    spray: (x: number, y: number, ang: number, spread: number, color: number, count: number, speed: number, life: number, size: number): void =>
+      this.renderer.spray(x, y, ang, spread, color, count, speed, life, size),
+    ghost: (x: number, y: number, color: number): void => this.renderer.ghost(x, y, color),
+    shockwave: (x: number, y: number, color: number, radius: number): void => this.renderer.shockwave(x, y, color, radius),
+    chroma: (kind: "emp" | "chrono" | "kill"): void => this.renderer.chroma(kind),
   };
 }
 
