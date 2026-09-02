@@ -15,7 +15,7 @@
  *   │   └─ fovMask (stencil polygon, not rendered)
  *   └─ screenC: vignette, damage flash, minimap
  */
-import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
+import { Application, ColorMatrixFilter, Container, Graphics, Sprite, Text } from "pixi.js";
 import type { TexSet } from "./textures";
 import { makeTextures } from "./textures";
 import { ParticlePool } from "./particles";
@@ -61,6 +61,9 @@ interface LightSlot {
 interface BeamSlot {
   g: Graphics;
   life: number;
+  maxLife: number;
+  travel: number;
+  travelDur: number;
 }
 
 interface RingSlot {
@@ -70,10 +73,17 @@ interface RingSlot {
   radius: number;
   x: number;
   y: number;
+  style: number; // 0 normal, 1 shockwave, 2 scorch
 }
 
 interface TextSlot {
   t: Text;
+  life: number;
+  maxLife: number;
+}
+
+interface GhostSlot {
+  g: Graphics;
   life: number;
   maxLife: number;
 }
@@ -109,6 +119,13 @@ export class Renderer implements IFx {
   private camY = 0;
   private zoom = 1.6;
   private shakeMag = 0;
+  private shakeDx = 0;
+  private shakeDy = 0;
+  private rotTrauma = 0;
+  private zoomPunch = 0;
+  private chromaT = 0;
+  private chromaKind: "emp" | "chrono" | "kill" = "emp";
+  private chromaFilter: ColorMatrixFilter | null = null;
   private snapCam = true;
   private flashAlpha = 0;
   private time = 0;
@@ -123,6 +140,7 @@ export class Renderer implements IFx {
   private beams: BeamSlot[] = [];
   private rings: RingSlot[] = [];
   private texts: TextSlot[] = [];
+  private ghosts: GhostSlot[] = [];
 
   get canvas(): HTMLCanvasElement | null {
     return this.app?.canvas ?? null;
@@ -175,6 +193,7 @@ export class Renderer implements IFx {
     w.addChild(this.crosshair);
     w.addChild(this.fovMask);
     litC.mask = this.fovMask;
+    this.chromaFilter = new ColorMatrixFilter();
     const sc = this.screenC;
     sc.addChild(this.flashGfx);
     const vg = new Sprite(this.tex.vignette);
@@ -201,7 +220,7 @@ export class Renderer implements IFx {
       g.blendMode = "add";
       g.visible = false;
       this.beamLayer.addChild(g);
-      this.beams.push({ g, life: 0 });
+      this.beams.push({ g, life: 0, maxLife: 0.18, travel: 1, travelDur: 0.06 });
     }
     for (let i = 0; i < 14; i++) {
       const g = new Graphics();
@@ -209,7 +228,7 @@ export class Renderer implements IFx {
       g.visible = false;
       g.circle(0, 0, 1).stroke({ color: 0xffffff, width: 0.09, alpha: 1 });
       this.ringLayer.addChild(g);
-      this.rings.push({ g, life: 0, maxLife: 1, radius: 1, x: 0, y: 0 });
+      this.rings.push({ g, life: 0, maxLife: 1, radius: 1, x: 0, y: 0, style: 0 });
     }
     for (let i = 0; i < 26; i++) {
       const t = new Text({
@@ -226,16 +245,33 @@ export class Renderer implements IFx {
       this.textLayer.addChild(t);
       this.texts.push({ t, life: 0, maxLife: 1 });
     }
+    for (let i = 0; i < 8; i++) {
+      const g = new Graphics();
+      g.blendMode = "add";
+      g.visible = false;
+      g.poly([0, -11, 9.5, -5.5, 9.5, 5.5, 0, 11, -9.5, 5.5, -9.5, -5.5])
+        .stroke({ color: C_CYAN, width: 2, alpha: 0.85 });
+      this.entityLayer.addChild(g);
+      this.ghosts.push({ g, life: 0, maxLife: 0.22 });
+    }
 
     this.mouseSx = window.innerWidth / 2;
     this.mouseSy = window.innerHeight / 2;
 
+    const isOverlay = (e: Event): boolean => {
+      const t = e.target;
+      if (!t) return false;
+      if (this.app && t === this.app.canvas) return false;
+      return t instanceof HTMLElement;
+    };
     const onMove = (e: Event): void => {
+      if (isOverlay(e)) return;
       const me = e as MouseEvent | PointerEvent;
       this.mouseSx = me.clientX;
       this.mouseSy = me.clientY;
     };
     const onDown = (e: Event): void => {
+      if (isOverlay(e)) return;
       const me = e as MouseEvent | PointerEvent;
       if (me.button === 0 || me.button === undefined) {
         this.mouseSx = me.clientX;
@@ -318,10 +354,18 @@ export class Renderer implements IFx {
     this.stairsGfx.x = (map.stairsX + 0.5) * TILE;
     this.stairsGfx.y = (map.stairsY + 0.5) * TILE;
     this.snapCam = true;
+    this.shakeMag = 0;
+    this.rotTrauma = 0;
+    this.zoomPunch = 0;
+    this.chromaT = 0;
+    this.worldC.rotation = 0;
+    this.lightLayer.filters = null;
+    this.beamLayer.filters = null;
     this.particles.clearAll();
     for (const b of this.beams) {
       b.life = 0;
       b.g.visible = false;
+      b.g.scale.set(1);
     }
     for (const r of this.rings) {
       r.life = 0;
@@ -330,6 +374,10 @@ export class Renderer implements IFx {
     for (const t of this.texts) {
       t.life = 0;
       t.t.visible = false;
+    }
+    for (const gh of this.ghosts) {
+      gh.life = 0;
+      gh.g.visible = false;
     }
   }
 
@@ -919,21 +967,31 @@ export class Renderer implements IFx {
       g.x = (x0 + 0.5) * TILE;
       g.y = (y0 + 0.5) * TILE;
       g.rotation = Math.atan2(dy, dx);
+      g.scale.set(0.08, 1);
       g.visible = true;
       g.alpha = 1;
-      b.life = 0.16;
+      b.travel = 0;
+      b.travelDur = 0.04 + Math.random() * 0.04; // 40–80ms travel lerp
+      b.maxLife = 0.18;
+      b.life = 0.18;
       return;
     }
   }
 
   ring(x: number, y: number, color: number, radius: number): void {
+    this.spawnRing(x, y, color, radius, 0);
+  }
+
+  private spawnRing(x: number, y: number, color: number, radius: number, style: number): void {
     for (const r of this.rings) {
       if (r.life > 0) continue;
       r.x = (x + 0.5) * TILE;
       r.y = (y + 0.5) * TILE;
       r.radius = Math.max(4, radius * TILE);
-      r.life = 0.38;
-      r.maxLife = 0.38;
+      r.style = style;
+      const life = style === 1 ? 0.52 : style === 2 ? 0.7 : 0.38;
+      r.life = life;
+      r.maxLife = life;
       r.g.tint = color;
       r.g.visible = true;
       return;
@@ -944,8 +1002,9 @@ export class Renderer implements IFx {
     this.particles.burst(x, y, color, count, speed, life, size);
   }
 
-  shards(x: number, y: number, color: number, count: number, power: number): void {
-    this.particles.shards(x, y, color, count, power);
+  shards(x: number, y: number, color: number, count: number, power: number, hang = false): void {
+    this.particles.shards(x, y, color, count, power, hang);
+    if (hang) this.particles.scorch(x, y, color);
   }
 
   text(x: number, y: number, str: string, color: string, size = 15): void {
@@ -970,8 +1029,54 @@ export class Renderer implements IFx {
     this.flashAlpha = Math.max(this.flashAlpha, alpha);
   }
 
-  shake(mag: number): void {
-    this.shakeMag = Math.min(26, Math.max(this.shakeMag, mag));
+  shake(mag: number, dx?: number, dy?: number): void {
+    const capped = Math.min(18, mag);
+    this.shakeMag = Math.min(18, Math.max(this.shakeMag, capped));
+    if (dx !== undefined && dy !== undefined && (dx !== 0 || dy !== 0)) {
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      this.shakeDx = dx / len;
+      this.shakeDy = dy / len;
+      this.rotTrauma = clamp((this.shakeDy - this.shakeDx) * capped * 0.0016, -0.028, 0.028);
+    } else if (this.shakeDx === 0 && this.shakeDy === 0) {
+      this.shakeDx = Math.random() - 0.5;
+      this.shakeDy = Math.random() - 0.5;
+    }
+    if (capped >= 10) {
+      this.zoomPunch = Math.min(0.07, Math.max(this.zoomPunch, capped * 0.004));
+    }
+  }
+
+  spray(x: number, y: number, ang: number, spread: number, color: number, count: number, speed: number, life: number, size: number): void {
+    this.particles.spray(x, y, ang, spread, color, count, speed, life, size);
+  }
+
+  ghost(x: number, y: number, color: number): void {
+    for (const gh of this.ghosts) {
+      if (gh.life > 0) continue;
+      gh.g.x = (x + 0.5) * TILE;
+      gh.g.y = (y + 0.5) * TILE;
+      gh.g.scale.set(1);
+      gh.g.tint = color;
+      gh.g.alpha = 0.7;
+      gh.g.visible = true;
+      gh.life = 0.22;
+      gh.maxLife = 0.22;
+      return;
+    }
+  }
+
+  shockwave(x: number, y: number, color: number, radius: number): void {
+    this.spawnRing(x, y, color, radius, 1);
+    this.spawnRing(x, y, mixColor(color, 0xffffff, 0.35), radius * 0.55, 1);
+  }
+
+  chroma(kind: "emp" | "chrono" | "kill"): void {
+    this.chromaKind = kind;
+    const dur = kind === "emp" ? 0.28 : kind === "chrono" ? 0.22 : 0.12;
+    this.chromaT = Math.max(this.chromaT, dur);
+    if (kind === "emp" || kind === "kill") {
+      this.zoomPunch = Math.min(0.07, Math.max(this.zoomPunch, kind === "emp" ? 0.05 : 0.04));
+    }
   }
 
   /* ----------------------------------------------------------- per-frame */
@@ -1014,16 +1119,29 @@ export class Renderer implements IFx {
     const halfH = h / 2 / this.zoom;
     this.camX = mapPxW > halfW * 2 ? clamp(this.camX, halfW, mapPxW - halfW) : mapPxW / 2;
     this.camY = mapPxH > halfH * 2 ? clamp(this.camY, halfH, mapPxH - halfH) : mapPxH / 2;
-    this.shakeMag *= Math.exp(-6.5 * dtRaw);
-    if (this.shakeMag < 0.08) this.shakeMag = 0;
-    const sx = (Math.random() - 0.5) * 2 * this.shakeMag;
-    const sy = (Math.random() - 0.5) * 2 * this.shakeMag;
-    this.worldC.position.set(w / 2 - this.camX * this.zoom + sx, h / 2 - this.camY * this.zoom + sy);
-    this.worldC.scale.set(this.zoom);
+    this.shakeMag *= Math.exp(-7.2 * dtRaw);
+    if (this.shakeMag < 0.08) {
+      this.shakeMag = 0;
+      this.shakeDx = 0;
+      this.shakeDy = 0;
+    }
+    this.rotTrauma *= Math.exp(-8.5 * dtRaw);
+    if (Math.abs(this.rotTrauma) < 0.0008) this.rotTrauma = 0;
+    this.zoomPunch *= Math.exp(-10 * dtRaw);
+    if (this.zoomPunch < 0.001) this.zoomPunch = 0;
+    const dirW = 0.78;
+    const noiseW = 0.22;
+    const sx = (this.shakeDx * dirW + (Math.random() - 0.5) * 2 * noiseW) * this.shakeMag;
+    const sy = (this.shakeDy * dirW + (Math.random() - 0.5) * 2 * noiseW) * this.shakeMag;
+    const z = this.zoom * (1 + this.zoomPunch);
+    this.worldC.pivot.set(this.camX, this.camY);
+    this.worldC.position.set(w / 2 + sx, h / 2 + sy);
+    this.worldC.scale.set(z);
+    this.worldC.rotation = this.rotTrauma;
 
-    /* pointer → aim tile */
-    const worldPxX = (this.mouseSx - this.worldC.position.x) / this.zoom;
-    const worldPxY = (this.mouseSy - this.worldC.position.y) / this.zoom;
+    /* pointer → aim tile (ignore tiny rotational trauma for aim) */
+    const worldPxX = this.camX + (this.mouseSx - (w / 2 + sx)) / z;
+    const worldPxY = this.camY + (this.mouseSy - (h / 2 + sy)) / z;
     ctx.input.aimX = worldPxX / TILE;
     ctx.input.aimY = worldPxY / TILE;
     ctx.input.lmbHeld = this.mouseLmb;
@@ -1054,8 +1172,16 @@ export class Renderer implements IFx {
       v.root.x = (rx + 0.5) * TILE;
       v.root.y = (ry + 0.5) * TILE + bob;
       const punch = a ? a.punch : 0;
-      v.body.scale.set(1 + punch * 0.35);
-      if (tag === "loot") v.body.scale.set((1 + punch * 0.35) * lootPulse);
+      if (tag === "player" && punch > 0) {
+        const adx = Math.abs(ctx.stats.lastDx);
+        const ady = Math.abs(ctx.stats.lastDy);
+        if (adx >= ady) v.body.scale.set(1 + punch * 0.48, 1 - punch * 0.26);
+        else v.body.scale.set(1 - punch * 0.26, 1 + punch * 0.48);
+      } else if (tag === "loot") {
+        v.body.scale.set((1 + punch * 0.35) * lootPulse);
+      } else {
+        v.body.scale.set(1 + punch * 0.35);
+      }
       // hit feedback brightens toward a lit-up version of the entity's own
       // color — never a full white-out
       v.flash = Math.max(0, v.flash - dtSim * 5);
@@ -1233,15 +1359,20 @@ export class Renderer implements IFx {
       }
     }
 
-    /* beams / rings / texts */
+    /* beams / rings / texts / ghosts */
     for (const b of this.beams) {
       if (b.life <= 0) continue;
+      if (b.travel < 1) {
+        b.travel = Math.min(1, b.travel + dtSim / b.travelDur);
+        b.g.scale.x = b.travel;
+      }
       b.life -= dtSim;
       if (b.life <= 0) {
         b.g.visible = false;
+        b.g.scale.set(1);
         continue;
       }
-      b.g.alpha = b.life / 0.16;
+      b.g.alpha = b.life / b.maxLife;
     }
     for (const r of this.rings) {
       if (r.life <= 0) continue;
@@ -1251,11 +1382,33 @@ export class Renderer implements IFx {
         continue;
       }
       const t = 1 - r.life / r.maxLife;
-      const s = r.radius * (0.25 + t * 0.75);
+      let s: number;
+      let a: number;
+      if (r.style === 1) {
+        s = r.radius * (0.08 + t * 1.12);
+        a = (1 - t) * 0.95;
+      } else if (r.style === 2) {
+        s = r.radius * (0.55 + t * 0.4);
+        a = (1 - t * t) * 0.55;
+      } else {
+        s = r.radius * (0.25 + t * 0.75);
+        a = (1 - t) * 0.9;
+      }
       r.g.x = r.x;
       r.g.y = r.y;
       r.g.scale.set(s);
-      r.g.alpha = (1 - t) * 0.9;
+      r.g.alpha = a;
+    }
+    for (const gh of this.ghosts) {
+      if (gh.life <= 0) continue;
+      gh.life -= dtRaw;
+      if (gh.life <= 0) {
+        gh.g.visible = false;
+        continue;
+      }
+      const t = 1 - gh.life / gh.maxLife;
+      gh.g.alpha = (1 - t) * 0.7;
+      gh.g.scale.set(1 + t * 0.12);
     }
     for (const s of this.texts) {
       if (s.life <= 0) continue;
@@ -1304,6 +1457,33 @@ export class Renderer implements IFx {
     /* screen flash decay */
     this.flashAlpha = Math.max(0, this.flashAlpha - dtRaw * 2.4);
     this.flashGfx.alpha = this.flashAlpha;
+
+    /* cheap chromatic kick — ColorMatrix on light+beam only, never the full scene */
+    if (this.chromaT > 0) {
+      this.chromaT = Math.max(0, this.chromaT - dtRaw);
+      const dur = this.chromaKind === "emp" ? 0.28 : this.chromaKind === "chrono" ? 0.22 : 0.12;
+      const k = clamp(this.chromaT / dur, 0, 1);
+      const f = this.chromaFilter;
+      if (f) {
+        f.reset();
+        if (this.chromaKind === "emp") {
+          f.hue(26 * k, true);
+          f.saturate(0.5 * k, true);
+        } else if (this.chromaKind === "chrono") {
+          f.hue(-20 * k, true);
+          f.saturate(0.35 * k, true);
+        } else {
+          f.saturate(0.4 * k, true);
+        }
+        if (!this.lightLayer.filters) {
+          this.lightLayer.filters = [f];
+          this.beamLayer.filters = [f];
+        }
+      }
+    } else if (this.lightLayer.filters) {
+      this.lightLayer.filters = null;
+      this.beamLayer.filters = null;
+    }
 
     app.render();
   }
